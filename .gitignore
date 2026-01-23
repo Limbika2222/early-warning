@@ -1,0 +1,27 @@
+# ---- Python ----
+venv/
+__pycache__/
+*.pyc
+
+# ---- Environment ----
+.env
+
+# ---- Databases ----
+*.db
+
+# ---- Node ----
+node_modules/
+
+# ---- Build ----
+dist/
+.build/
+
+# ---- OS ----
+.DS_Store
+
+# ---- Data (raw / local) ----
+data/raw/
+data/processed/
+
+# ---- Logs ----
+*.log
