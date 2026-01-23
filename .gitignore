@@ -25,3 +25,14 @@ data/processed/
 
 # ---- Logs ----
 *.log
+# Backend
+backend/.env
+backend/venv/
+backend/__pycache__/
+backend/*.db
+
+# Frontend
+frontend/node_modules/
+
+# OS / editor
+.DS_Store
