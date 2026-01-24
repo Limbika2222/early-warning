@@ -1,37 +1,37 @@
 import { useState } from "react"
 
 type DiseaseOption = {
-  id: number
-  name: string
+  label: string
+  keyword: string
 }
 
 type CountryOption = {
-  id: number
-  name: string
+  label: string
+  iso2: string
 }
 
 const diseases: DiseaseOption[] = [
-  { id: 1, name: "Influenza" },
-  { id: 2, name: "Malaria" },
-  { id: 3, name: "Cholera" },
-  { id: 4, name: "Zika" },
+  { label: "Influenza", keyword: "fever cough" },
+  { label: "Malaria", keyword: "malaria" },
+  { label: "Cholera", keyword: "cholera" },
+  { label: "Zika", keyword: "zika" },
 ]
 
 const countries: CountryOption[] = [
-  { id: 1, name: "India" },
-  { id: 2, name: "Malawi" },
-  { id: 3, name: "Philippines" },
+  { label: "India", iso2: "IN" },
+  { label: "Malawi", iso2: "MW" },
+  { label: "Philippines", iso2: "PH" },
 ]
 
 export default function UploadData() {
-  const [diseaseId, setDiseaseId] = useState<number | "">("")
-  const [countryId, setCountryId] = useState<number | "">("")
+  const [keyword, setKeyword] = useState("")
+  const [country, setCountry] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
-    if (!file || !diseaseId || !countryId) {
+    if (!file || !keyword || !country) {
       setStatus("Please select disease, country, and CSV file.")
       return
     }
@@ -40,18 +40,44 @@ export default function UploadData() {
     setStatus(null)
 
     try {
-      // Backend upload will be connected next
-      console.log("Uploading:", {
-        diseaseId,
-        countryId,
-        file,
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("disease_keyword", keyword)
+      formData.append("country_iso2", country)
+
+      const res = await fetch("/api/trends/upload-csv", {
+        method: "POST",
+        body: formData,
       })
 
-      await new Promise(resolve => setTimeout(resolve, 1000)) // mock delay
+      if (!res.ok) {
+        const errorData: unknown = await res.json()
 
-      setStatus("✅ CSV uploaded successfully")
-    } catch {
-      setStatus("❌ Upload failed")
+        if (
+          typeof errorData === "object" &&
+          errorData !== null &&
+          "detail" in errorData
+        ) {
+          throw new Error(String(errorData.detail))
+        }
+
+        throw new Error("Upload failed")
+      }
+
+      const data: {
+        rows_inserted: number
+        date_range: { start: string; end: string }
+      } = await res.json()
+
+      setStatus(
+        `✅ Uploaded ${data.rows_inserted} rows (${data.date_range.start} → ${data.date_range.end})`
+      )
+    } catch (err) {
+      if (err instanceof Error) {
+        setStatus(`❌ ${err.message}`)
+      } else {
+        setStatus("❌ Upload failed due to an unknown error")
+      }
     } finally {
       setLoading(false)
     }
@@ -63,7 +89,7 @@ export default function UploadData() {
         Upload Google Trends Data
       </h1>
       <p className="text-gray-600 mb-6">
-        Upload Google Trends <strong>Interest over Time</strong> CSV files for analysis.
+        Upload <strong>Interest over Time</strong> CSV exported from Google Trends.
       </p>
 
       <div className="bg-white rounded-lg shadow p-6 space-y-5">
@@ -73,14 +99,14 @@ export default function UploadData() {
             Disease
           </label>
           <select
-            value={diseaseId}
-            onChange={e => setDiseaseId(Number(e.target.value))}
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
             className="w-full border rounded px-3 py-2"
           >
             <option value="">Select disease</option>
             {diseases.map(d => (
-              <option key={d.id} value={d.id}>
-                {d.name}
+              <option key={d.keyword} value={d.keyword}>
+                {d.label}
               </option>
             ))}
           </select>
@@ -92,14 +118,14 @@ export default function UploadData() {
             Country
           </label>
           <select
-            value={countryId}
-            onChange={e => setCountryId(Number(e.target.value))}
+            value={country}
+            onChange={e => setCountry(e.target.value)}
             className="w-full border rounded px-3 py-2"
           >
             <option value="">Select country</option>
             {countries.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name}
+              <option key={c.iso2} value={c.iso2}>
+                {c.label}
               </option>
             ))}
           </select>
@@ -108,7 +134,7 @@ export default function UploadData() {
         {/* File */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Google Trends CSV file
+            Google Trends CSV
           </label>
           <input
             type="file"
