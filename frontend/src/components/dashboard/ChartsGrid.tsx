@@ -12,25 +12,36 @@ import ChartCard from "./ChartCard"
 import { fetchInterestOverTime } from "../../api/trends"
 import type { TrendPoint } from "../../api/trends"
 
-export default function ChartsGrid() {
+interface Props {
+  keywordId: number
+  countryId: number
+}
+
+export default function ChartsGrid({ keywordId, countryId }: Props) {
   const [data, setData] = useState<TrendPoint[]>([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchInterestOverTime(1, 1) // fever cough, India
-      .then(setData)
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [])
+    let cancelled = false
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
-        Loading real epidemiological signals…
-      </div>
-    )
-  }
+    fetchInterestOverTime(keywordId, countryId)
+      .then(result => {
+        if (!cancelled) {
+          setData(result)
+          setError(null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("No Google Trends data uploaded for this disease yet")
+          setData([])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [keywordId, countryId])
 
   if (error) {
     return (
@@ -40,9 +51,17 @@ export default function ChartsGrid() {
     )
   }
 
+  if (!data.length) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        No data available
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 gap-6">
-      <ChartCard title="Google Trends – Fever & Cough (India)">
+      <ChartCard title="Google Trends – Interest Over Time">
         <ResponsiveContainer height={300}>
           <LineChart data={data}>
             <XAxis dataKey="date" hide />
@@ -54,7 +73,6 @@ export default function ChartsGrid() {
               stroke="#0ea5e9"
               strokeWidth={2}
               dot={false}
-              isAnimationActive
             />
           </LineChart>
         </ResponsiveContainer>

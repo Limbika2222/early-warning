@@ -1,30 +1,34 @@
 import DiseaseCard from "./DiseaseCard"
-import type { Disease } from "../../data/mockDashboardData"
+
+export type Disease = {
+  id: number
+  label: string
+}
 
 interface Props {
-  selectedDisease: Disease
-  onSelect: (disease: Disease) => void
+  selectedDiseaseId: number
+  onSelect: (id: number) => void
 }
 
 const diseases: Disease[] = [
-  "Influenza",
-  "Malaria",
-  "Cholera",
-  "Zika",
+  { id: 1, label: "Influenza" },
+  { id: 20, label: "Malaria" },   // IMPORTANT: matches DB
+  { id: 30, label: "Cholera" },
+  { id: 42, label: "Zika" },
 ]
 
 export default function DiseaseSelector({
-  selectedDisease,
+  selectedDiseaseId,
   onSelect,
 }: Props) {
   return (
     <div className="grid grid-cols-4 gap-6 mb-8">
       {diseases.map(d => (
         <DiseaseCard
-          key={d}
-          label={d}
-          active={d === selectedDisease}
-          onClick={() => onSelect(d)}
+          key={d.id}
+          label={d.label}
+          active={d.id === selectedDiseaseId}
+          onClick={() => onSelect(d.id)}
         />
       ))}
     </div>
