@@ -5,8 +5,10 @@ from fastapi import (
     UploadFile,
     File,
     Form,
+    Query,
 )
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, UTC
 
 from app.utils.database import SessionLocal
@@ -122,3 +124,63 @@ async def upload_google_trends_csv(
             "end": df["date"].max().isoformat(),
         },
     }
+
+
+# ---------------------------------
+# GET: Uploaded datasets (NEW)
+# ---------------------------------
+@router.get("/datasets")
+def list_uploaded_datasets(
+    search: str | None = Query(None),
+    sort_by: str = Query("upload_date", regex="^(keyword|country|upload_date)$"),
+    order: str = Query("desc", regex="^(asc|desc)$"),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(
+            GoogleTrendsKeyword.keyword_text.label("keyword"),
+            Country.name.label("country"),
+            func.min(GoogleTrendsTimeseries.date).label("start_date"),
+            func.max(GoogleTrendsTimeseries.date).label("end_date"),
+            func.count(GoogleTrendsTimeseries.id).label("row_count"),
+            func.max(GoogleTrendsTimeseries.fetched_at).label("upload_date"),
+        )
+        .join(GoogleTrendsKeyword, GoogleTrendsKeyword.id == GoogleTrendsTimeseries.keyword_id)
+        .join(Country, Country.id == GoogleTrendsTimeseries.country_id)
+        .group_by(
+            GoogleTrendsKeyword.keyword_text,
+            Country.name,
+        )
+    )
+
+    if search:
+        query = query.filter(
+            GoogleTrendsKeyword.keyword_text.ilike(f"%{search}%")
+        )
+
+    sort_map = {
+        "keyword": GoogleTrendsKeyword.keyword_text,
+        "country": Country.name,
+        "upload_date": func.max(GoogleTrendsTimeseries.fetched_at),
+    }
+
+    sort_col = sort_map.get(sort_by, sort_map["upload_date"])
+
+    if order == "asc":
+        query = query.order_by(sort_col.asc())
+    else:
+        query = query.order_by(sort_col.desc())
+
+    results = query.all()
+
+    return [
+        {
+            "keyword": r.keyword,
+            "country": r.country,
+            "start_date": r.start_date.isoformat(),
+            "end_date": r.end_date.isoformat(),
+            "row_count": r.row_count,
+            "upload_date": r.upload_date.isoformat(),
+        }
+        for r in results
+    ]
