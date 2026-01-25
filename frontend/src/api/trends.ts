@@ -1,24 +1,26 @@
 // src/api/trends.ts
 
+// --------------------------------
+// Shared types
+// --------------------------------
 export type TrendPoint = {
   date: string
   value: number
 }
 
-export type UploadedDataset = {
+export type UploadHistoryItem = {
+  id: number
   keyword: string
   country: string
-  start_date: string
-  end_date: string
-  row_count: number
-  upload_date: string
+  rows_inserted: number
+  uploaded_at: string
 }
 
 const API_BASE = "/api/trends"
 
-// -----------------------------
-// Existing function
-// -----------------------------
+// --------------------------------
+// Interest over time (single keyword)
+// --------------------------------
 export async function fetchInterestOverTime(
   keywordId: number,
   countryId: number
@@ -34,28 +36,32 @@ export async function fetchInterestOverTime(
   return res.json()
 }
 
-// -----------------------------
-// Fetch uploaded datasets
-// -----------------------------
-export type DatasetQueryParams = {
-  search?: string
-  sort_by?: "keyword" | "country" | "upload_date"
-  order?: "asc" | "desc"
-}
-
-export async function fetchUploadedDatasets(
-  params: DatasetQueryParams = {}
-): Promise<UploadedDataset[]> {
-  const query = new URLSearchParams()
-
-  if (params.search) query.set("search", params.search)
-  if (params.sort_by) query.set("sort_by", params.sort_by)
-  if (params.order) query.set("order", params.order)
-
-  const res = await fetch(`${API_BASE}/datasets?${query.toString()}`)
+// --------------------------------
+// Aggregated disease signal (multi-keyword mean)
+// --------------------------------
+export async function fetchAggregatedDiseaseSignal(
+  diseaseId: number,
+  countryId: number
+): Promise<TrendPoint[]> {
+  const res = await fetch(
+    `${API_BASE}/aggregate?disease_id=${diseaseId}&country_id=${countryId}`
+  )
 
   if (!res.ok) {
-    throw new Error("Failed to fetch uploaded datasets")
+    throw new Error("Failed to fetch aggregated disease signal")
+  }
+
+  return res.json()
+}
+
+// --------------------------------
+// Upload history (OPTION B – every upload)
+// --------------------------------
+export async function fetchUploadHistory(): Promise<UploadHistoryItem[]> {
+  const res = await fetch(`${API_BASE}/uploads`)
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch upload history")
   }
 
   return res.json()

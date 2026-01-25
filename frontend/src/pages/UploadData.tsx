@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
-import { fetchUploadedDatasets } from "../api/trends"
-import type { UploadedDataset } from "../api/trends"
+import { useNavigate } from "react-router-dom"
+import { fetchUploadHistory } from "../api/trends"
+import type { UploadHistoryItem } from "../api/trends"
 
 type DiseaseOption = {
   label: string
   keyword: string
+  diseaseId: number
 }
 
 type CountryOption = {
@@ -13,10 +15,10 @@ type CountryOption = {
 }
 
 const diseases: DiseaseOption[] = [
-  { label: "Influenza", keyword: "fever cough" },
-  { label: "Malaria", keyword: "malaria" },
-  { label: "Cholera", keyword: "cholera" },
-  { label: "Zika", keyword: "zika" },
+  { label: "Influenza", keyword: "fever cough", diseaseId: 1 },
+  { label: "Malaria", keyword: "malaria", diseaseId: 2 },
+  { label: "Cholera", keyword: "cholera", diseaseId: 3 },
+  { label: "Zika", keyword: "zika", diseaseId: 4 },
 ]
 
 const countries: CountryOption[] = [
@@ -26,6 +28,8 @@ const countries: CountryOption[] = [
 ]
 
 export default function UploadData() {
+  const navigate = useNavigate()
+
   const [keyword, setKeyword] = useState("")
   const [country, setCountry] = useState("")
   const [file, setFile] = useState<File | null>(null)
@@ -33,35 +37,29 @@ export default function UploadData() {
   const [uploading, setUploading] = useState(false)
 
   // ---------------------------
-  // Dataset table state
+  // Upload history table state
   // ---------------------------
-  const [datasets, setDatasets] = useState<UploadedDataset[]>([])
-  const [search, setSearch] = useState("")
-  const [sortBy, setSortBy] =
-    useState<"upload_date" | "keyword" | "country">("upload_date")
-  const [order, setOrder] = useState<"asc" | "desc">("desc")
+  const [uploads, setUploads] = useState<UploadHistoryItem[]>([])
   const [loadingTable, setLoadingTable] = useState(false)
 
   // ---------------------------
-  // Load datasets (memoized)
+  // Load upload history
   // ---------------------------
-  const loadDatasets = useCallback(async () => {
+  const loadUploads = useCallback(async () => {
     setLoadingTable(true)
     try {
-      const data = await fetchUploadedDatasets({
-        search,
-        sort_by: sortBy,
-        order,
-      })
-      setDatasets(data)
+      const data = await fetchUploadHistory()
+      setUploads(data)
+    } catch {
+      setStatus("❌ Failed to fetch upload history")
     } finally {
       setLoadingTable(false)
     }
-  }, [search, sortBy, order])
+  }, [])
 
   useEffect(() => {
-    loadDatasets()
-  }, [loadDatasets])
+    loadUploads()
+  }, [loadUploads])
 
   // ---------------------------
   // Upload handler
@@ -100,13 +98,19 @@ export default function UploadData() {
         `✅ Uploaded ${data.rows_inserted} rows (${data.date_range.start} → ${data.date_range.end})`
       )
 
-      await loadDatasets()
+      await loadUploads()
     } catch (err) {
       setStatus(err instanceof Error ? `❌ ${err.message}` : "❌ Upload failed")
     } finally {
       setUploading(false)
     }
   }
+
+  // ---------------------------
+  // Helper: keyword → diseaseId
+  // ---------------------------
+  const getDiseaseIdFromKeyword = (kw: string) =>
+    diseases.find(d => d.keyword === kw)?.diseaseId
 
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-12">
@@ -161,65 +165,49 @@ export default function UploadData() {
         </div>
       </div>
 
-      {/* Dataset Table */}
+      {/* Upload History Table */}
       <div>
         <h2 className="text-xl font-semibold mb-4">
-          Uploaded Datasets
+          Upload History (click row to open dashboard)
         </h2>
 
-        <div className="flex gap-4 mb-4">
-          <input
-            className="border px-3 py-2 rounded"
-            placeholder="Search keyword"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-
-          <select
-            className="border px-3 py-2 rounded"
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as typeof sortBy)}
-          >
-            <option value="upload_date">Upload date</option>
-            <option value="keyword">Keyword</option>
-            <option value="country">Country</option>
-          </select>
-
-          <button
-            className="border px-3 py-2 rounded"
-            onClick={() => setOrder(o => (o === "asc" ? "desc" : "asc"))}
-          >
-            {order}
-          </button>
-        </div>
-
         {loadingTable ? (
-          <p>Loading datasets…</p>
+          <p>Loading uploads…</p>
         ) : (
           <table className="w-full border">
             <thead className="bg-gray-100">
               <tr>
                 <th className="p-2 border">Keyword</th>
                 <th className="p-2 border">Country</th>
-                <th className="p-2 border">Date range</th>
                 <th className="p-2 border">Rows</th>
-                <th className="p-2 border">Uploaded</th>
+                <th className="p-2 border">Uploaded at</th>
               </tr>
             </thead>
             <tbody>
-              {datasets.map((d, i) => (
-                <tr key={i}>
-                  <td className="p-2 border">{d.keyword}</td>
-                  <td className="p-2 border">{d.country}</td>
-                  <td className="p-2 border">
-                    {d.start_date} → {d.end_date}
-                  </td>
-                  <td className="p-2 border text-center">{d.row_count}</td>
-                  <td className="p-2 border">
-                    {new Date(d.upload_date).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
+              {uploads.map(u => {
+                const diseaseId = getDiseaseIdFromKeyword(u.keyword)
+
+                return (
+                  <tr
+                    key={u.id}
+                    className="cursor-pointer hover:bg-blue-50"
+                    onClick={() => {
+                      if (diseaseId) {
+                        navigate(`/dashboard?diseaseId=${diseaseId}`)
+                      }
+                    }}
+                  >
+                    <td className="p-2 border">{u.keyword}</td>
+                    <td className="p-2 border">{u.country}</td>
+                    <td className="p-2 border text-center">
+                      {u.rows_inserted}
+                    </td>
+                    <td className="p-2 border">
+                      {new Date(u.uploaded_at).toLocaleString()}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
