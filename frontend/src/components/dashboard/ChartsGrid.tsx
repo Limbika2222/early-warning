@@ -9,39 +9,56 @@ import {
 } from "recharts"
 
 import ChartCard from "./ChartCard"
-import { fetchInterestOverTime } from "../../api/trends"
+import { fetchAggregatedDiseaseSignal } from "../../api/trends"
 import type { TrendPoint } from "../../api/trends"
 
 interface Props {
-  keywordId: number
+  diseaseId: number
   countryId: number
 }
 
-export default function ChartsGrid({ keywordId, countryId }: Props) {
-  const [data, setData] = useState<TrendPoint[]>([])
+export default function ChartsGrid({ diseaseId, countryId }: Props) {
+  /**
+   * data === null  -> loading
+   * data.length   -> success
+   * error !== null-> error
+   */
+  const [data, setData] = useState<TrendPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
-    fetchInterestOverTime(keywordId, countryId)
+    // Reset state when disease/country changes
+    setData(null)
+    setError(null)
+
+    fetchAggregatedDiseaseSignal(diseaseId, countryId)
       .then(result => {
         if (!cancelled) {
           setData(result)
-          setError(null)
         }
       })
       .catch(() => {
         if (!cancelled) {
           setError("No Google Trends data uploaded for this disease yet")
-          setData([])
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [keywordId, countryId])
+  }, [diseaseId, countryId])
+
+  // ---------------- UI STATES ----------------
+
+  if (data === null && !error) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        Loading disease signal…
+      </div>
+    )
+  }
 
   if (error) {
     return (
@@ -51,7 +68,7 @@ export default function ChartsGrid({ keywordId, countryId }: Props) {
     )
   }
 
-  if (!data.length) {
+  if (!data || data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-500">
         No data available
@@ -59,14 +76,22 @@ export default function ChartsGrid({ keywordId, countryId }: Props) {
     )
   }
 
+  // ---------------- CHART ----------------
+
   return (
     <div className="grid grid-cols-1 gap-6">
-      <ChartCard title="Google Trends – Interest Over Time">
-        <ResponsiveContainer height={300}>
+      <ChartCard title="Aggregated Disease Signal (Google Trends)">
+        <ResponsiveContainer width="100%" height={300}>
           <LineChart data={data}>
             <XAxis dataKey="date" hide />
             <YAxis />
-            <Tooltip />
+            <Tooltip
+              labelFormatter={label =>
+                typeof label === "string"
+                  ? new Date(label).toLocaleDateString()
+                  : ""
+              }
+            />
             <Line
               type="monotone"
               dataKey="value"

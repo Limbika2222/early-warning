@@ -10,11 +10,20 @@ interface Props {
   onSelect: (id: number) => void
 }
 
+/**
+ * IMPORTANT:
+ * These IDs MUST match the `diseases.id` values in the database
+ *
+ * 1 → Influenza
+ * 2 → Malaria
+ * 3 → Cholera
+ * 4 → Zika
+ */
 const diseases: Disease[] = [
   { id: 1, label: "Influenza" },
-  { id: 20, label: "Malaria" },   // IMPORTANT: matches DB
-  { id: 30, label: "Cholera" },
-  { id: 42, label: "Zika" },
+  { id: 2, label: "Malaria" },
+  { id: 3, label: "Cholera" },
+  { id: 4, label: "Zika" },
 ]
 
 export default function DiseaseSelector({
@@ -23,12 +32,12 @@ export default function DiseaseSelector({
 }: Props) {
   return (
     <div className="grid grid-cols-4 gap-6 mb-8">
-      {diseases.map(d => (
+      {diseases.map(disease => (
         <DiseaseCard
-          key={d.id}
-          label={d.label}
-          active={d.id === selectedDiseaseId}
-          onClick={() => onSelect(d.id)}
+          key={disease.id}
+          label={disease.label}
+          active={disease.id === selectedDiseaseId}
+          onClick={() => onSelect(disease.id)}
         />
       ))}
     </div>

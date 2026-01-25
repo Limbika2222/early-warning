@@ -18,6 +18,7 @@ Google Trends data.
 
 ## Status
 Active development
+<<<<<<< HEAD
 
 ## Project screenshots
 <img width="1440" height="900" alt="Screenshot 2026-01-24 at 7 24 41 PM" src="https://github.com/user-attachments/assets/c1c2c29c-53ee-4010-94cf-7dcd96550657" />
@@ -25,3 +26,5 @@ Active development
 <img width="1440" height="900" alt="Screenshot 2026-01-24 at 7 25 12 PM" src="https://github.com/user-attachments/assets/3ff8d65a-3b61-4e02-a78c-d6a0e64e8b57" />
 ![Uploading Screenshot 2026-01-24 at 7.25.03 PM.png…]()
 <img width="1440" height="900" alt="Screenshot 2026-01-24 at 7 25 06 PM" src="https://github.com/user-attachments/assets/f161f570-bf68-434a-b136-22f72ae2b44d" />
+=======
+>>>>>>> 678baa2 (Fix dashboard upload selector mapping and support Malawi & Philippines)

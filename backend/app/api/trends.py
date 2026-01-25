@@ -5,16 +5,16 @@ from fastapi import (
     UploadFile,
     File,
     Form,
-    Query,
 )
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from datetime import datetime, UTC
+from datetime import datetime
+from collections import defaultdict
 
 from app.utils.database import SessionLocal
 from app.models.google_trends import (
     GoogleTrendsTimeseries,
     GoogleTrendsKeyword,
+    GoogleTrendsUpload,
     Country,
 )
 from app.services.google_trends_csv_parser import parse_google_trends_csv
@@ -34,7 +34,7 @@ def get_db():
 
 
 # ---------------------------------
-# GET: Interest over time
+# GET: Interest over time (single keyword)
 # ---------------------------------
 @router.get("/interest-over-time")
 def interest_over_time(
@@ -56,11 +56,8 @@ def interest_over_time(
         raise HTTPException(status_code=404, detail="No Google Trends data found")
 
     return [
-        {
-            "date": row.date.isoformat(),
-            "value": row.interest_index,
-        }
-        for row in rows
+        {"date": r.date.isoformat(), "value": r.interest_index}
+        for r in rows
     ]
 
 
@@ -74,7 +71,6 @@ async def upload_google_trends_csv(
     country_iso2: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    # Validate disease keyword
     keyword = (
         db.query(GoogleTrendsKeyword)
         .filter(GoogleTrendsKeyword.keyword_text == disease_keyword)
@@ -83,7 +79,6 @@ async def upload_google_trends_csv(
     if not keyword:
         raise HTTPException(status_code=400, detail="Unknown disease keyword")
 
-    # Validate country
     country = (
         db.query(Country)
         .filter(Country.iso2 == country_iso2)
@@ -92,7 +87,6 @@ async def upload_google_trends_csv(
     if not country:
         raise HTTPException(status_code=400, detail="Unknown country")
 
-    # Read file
     contents = await file.read()
 
     try:
@@ -100,25 +94,36 @@ async def upload_google_trends_csv(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    inserted = 0
-
+    rows_inserted = 0
     for _, row in df.iterrows():
-        record = GoogleTrendsTimeseries(
+        db.add(
+            GoogleTrendsTimeseries(
+                keyword_id=keyword.id,
+                country_id=country.id,
+                date=row["date"],
+                interest_index=int(row["interest_index"]),
+                source="google_trends_csv",
+                fetched_at=datetime.utcnow(),
+            )
+        )
+        rows_inserted += 1
+
+    # ✅ upload history
+    db.add(
+        GoogleTrendsUpload(
             keyword_id=keyword.id,
             country_id=country.id,
-            date=row["date"],
-            interest_index=int(row["interest_index"]),
-            source="google_trends_csv",
-            fetched_at=datetime.now(UTC),
+            rows_inserted=rows_inserted,
+            uploaded_at=datetime.utcnow(),
         )
-        db.add(record)
-        inserted += 1
+    )
 
     db.commit()
 
     return {
         "status": "success",
-        "rows_inserted": inserted,
+        "disease_id": keyword.disease_id,
+        "rows_inserted": rows_inserted,
         "date_range": {
             "start": df["date"].min().isoformat(),
             "end": df["date"].max().isoformat(),
@@ -127,60 +132,78 @@ async def upload_google_trends_csv(
 
 
 # ---------------------------------
-# GET: Uploaded datasets (NEW)
+# GET: Upload history (EVERY upload)
 # ---------------------------------
-@router.get("/datasets")
-def list_uploaded_datasets(
-    search: str | None = Query(None),
-    sort_by: str = Query("upload_date", regex="^(keyword|country|upload_date)$"),
-    order: str = Query("desc", regex="^(asc|desc)$"),
-    db: Session = Depends(get_db),
-):
-    query = (
+@router.get("/uploads")
+def list_upload_history(db: Session = Depends(get_db)):
+    uploads = (
         db.query(
-            GoogleTrendsKeyword.keyword_text.label("keyword"),
-            Country.name.label("country"),
-            func.min(GoogleTrendsTimeseries.date).label("start_date"),
-            func.max(GoogleTrendsTimeseries.date).label("end_date"),
-            func.count(GoogleTrendsTimeseries.id).label("row_count"),
-            func.max(GoogleTrendsTimeseries.fetched_at).label("upload_date"),
-        )
-        .join(GoogleTrendsKeyword, GoogleTrendsKeyword.id == GoogleTrendsTimeseries.keyword_id)
-        .join(Country, Country.id == GoogleTrendsTimeseries.country_id)
-        .group_by(
+            GoogleTrendsUpload.id,
             GoogleTrendsKeyword.keyword_text,
-            Country.name,
+            GoogleTrendsKeyword.disease_id,
+            Country.name.label("country"),
+            GoogleTrendsUpload.rows_inserted,
+            GoogleTrendsUpload.uploaded_at,
         )
+        .join(GoogleTrendsKeyword)
+        .join(Country)
+        .order_by(GoogleTrendsUpload.uploaded_at.desc())
+        .all()
     )
-
-    if search:
-        query = query.filter(
-            GoogleTrendsKeyword.keyword_text.ilike(f"%{search}%")
-        )
-
-    sort_map = {
-        "keyword": GoogleTrendsKeyword.keyword_text,
-        "country": Country.name,
-        "upload_date": func.max(GoogleTrendsTimeseries.fetched_at),
-    }
-
-    sort_col = sort_map.get(sort_by, sort_map["upload_date"])
-
-    if order == "asc":
-        query = query.order_by(sort_col.asc())
-    else:
-        query = query.order_by(sort_col.desc())
-
-    results = query.all()
 
     return [
         {
-            "keyword": r.keyword,
-            "country": r.country,
-            "start_date": r.start_date.isoformat(),
-            "end_date": r.end_date.isoformat(),
-            "row_count": r.row_count,
-            "upload_date": r.upload_date.isoformat(),
+            "id": u.id,
+            "keyword": u.keyword_text,
+            "disease_id": u.disease_id,
+            "country": u.country,
+            "rows_inserted": u.rows_inserted,
+            "uploaded_at": u.uploaded_at.isoformat(),
         }
-        for r in results
+        for u in uploads
+    ]
+
+
+# ---------------------------------
+# GET: Aggregated disease signal
+# ---------------------------------
+@router.get("/aggregate")
+def aggregate_disease_signal(
+    disease_id: int,
+    country_id: int,
+    db: Session = Depends(get_db),
+):
+    keywords = (
+        db.query(GoogleTrendsKeyword)
+        .filter(GoogleTrendsKeyword.disease_id == disease_id)
+        .all()
+    )
+
+    if not keywords:
+        raise HTTPException(status_code=404, detail="No keywords for disease")
+
+    keyword_ids = [k.id for k in keywords]
+
+    rows = (
+        db.query(
+            GoogleTrendsTimeseries.date,
+            GoogleTrendsTimeseries.interest_index,
+        )
+        .filter(
+            GoogleTrendsTimeseries.keyword_id.in_(keyword_ids),
+            GoogleTrendsTimeseries.country_id == country_id,
+        )
+        .all()
+    )
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data for aggregation")
+
+    grouped = defaultdict(list)
+    for r in rows:
+        grouped[r.date.isoformat()].append(r.interest_index)
+
+    return [
+        {"date": date, "value": sum(vals) / len(vals)}
+        for date, vals in sorted(grouped.items())
     ]
