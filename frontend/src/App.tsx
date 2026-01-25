@@ -4,6 +4,8 @@ import { onAuthStateChanged } from "firebase/auth"
 import type { User } from "firebase/auth"
 
 import { auth } from "./firebase"
+
+import AppLayout from "./components/layout/AppLayout"
 import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
 import UploadData from "./pages/UploadData"
@@ -13,12 +15,11 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, currentUser => {
+    const unsub = onAuthStateChanged(auth, currentUser => {
       setUser(currentUser)
       setLoading(false)
     })
-
-    return unsubscribe
+    return unsub
   }, [])
 
   if (loading) {
@@ -38,16 +39,13 @@ export default function App() {
           element={user ? <Navigate to="/" /> : <Login />}
         />
 
-        {/* Protected */}
+        {/* Protected layout */}
         <Route
-          path="/"
-          element={user ? <Dashboard /> : <Navigate to="/login" />}
-        />
-
-        <Route
-          path="/upload"
-          element={user ? <UploadData /> : <Navigate to="/login" />}
-        />
+          element={user ? <AppLayout /> : <Navigate to="/login" />}
+        >
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/upload" element={<UploadData />} />
+        </Route>
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" />} />

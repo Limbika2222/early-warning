@@ -1,14 +1,15 @@
 import { useState } from "react"
-import AppLayout from "../components/layout/AppLayout"
 import DiseaseSelector from "../components/dashboard/DiseaseSelector"
 import ChartsGrid from "../components/dashboard/ChartsGrid"
 import DashboardUploadSelector from "../components/dashboard/DashboardUploadSelector"
 import type { UploadHistoryItem } from "../api/trends"
 
 export default function Dashboard() {
+  // -------------------------
   // Defaults
-  const [selectedDiseaseId, setSelectedDiseaseId] = useState<number>(1)
-  const [countryId, setCountryId] = useState<number>(1)
+  // -------------------------
+  const [selectedDiseaseId, setSelectedDiseaseId] = useState<number>(1) // Influenza
+  const [countryId, setCountryId] = useState<number>(1) // India
 
   // -------------------------
   // MAPPINGS (single source of truth)
@@ -27,7 +28,7 @@ export default function Dashboard() {
   }
 
   return (
-    <AppLayout>
+    <>
       {/* ---------------------------------
           Upload selector (drives dashboard)
          --------------------------------- */}
@@ -61,6 +62,6 @@ export default function Dashboard() {
         diseaseId={selectedDiseaseId}
         countryId={countryId}
       />
-    </AppLayout>
+    </>
   )
 }
