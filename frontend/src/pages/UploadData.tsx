@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom"
 import { fetchUploadHistory } from "../api/trends"
 import type { UploadHistoryItem } from "../api/trends"
 
+// ---------------------------
+// Static reference data
+// ---------------------------
 type DiseaseOption = {
   label: string
   keyword: string
@@ -30,6 +33,9 @@ const countries: CountryOption[] = [
 export default function UploadData() {
   const navigate = useNavigate()
 
+  // ---------------------------
+  // Upload form state
+  // ---------------------------
   const [keyword, setKeyword] = useState("")
   const [country, setCountry] = useState("")
   const [file, setFile] = useState<File | null>(null)
@@ -43,7 +49,7 @@ export default function UploadData() {
   const [loadingTable, setLoadingTable] = useState(false)
 
   // ---------------------------
-  // Load upload history
+  // Fetch upload history
   // ---------------------------
   const loadUploads = useCallback(async () => {
     setLoadingTable(true)
@@ -62,7 +68,7 @@ export default function UploadData() {
   }, [loadUploads])
 
   // ---------------------------
-  // Upload handler
+  // Upload CSV handler
   // ---------------------------
   const handleSubmit = async () => {
     if (!file || !keyword || !country) {
@@ -112,9 +118,14 @@ export default function UploadData() {
   const getDiseaseIdFromKeyword = (kw: string) =>
     diseases.find(d => d.keyword === kw)?.diseaseId
 
+  // ---------------------------
+  // Render
+  // ---------------------------
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-12">
-      {/* Upload Form */}
+      {/* ---------------------------------
+          Upload Form
+         --------------------------------- */}
       <div>
         <h1 className="text-2xl font-semibold mb-6">
           Upload Google Trends Data
@@ -156,7 +167,7 @@ export default function UploadData() {
           <button
             onClick={handleSubmit}
             disabled={uploading}
-            className="bg-blue-600 text-white px-6 py-2 rounded"
+            className="bg-blue-600 text-white px-6 py-2 rounded disabled:opacity-60"
           >
             {uploading ? "Uploading…" : "Upload CSV"}
           </button>
@@ -165,7 +176,9 @@ export default function UploadData() {
         </div>
       </div>
 
-      {/* Upload History Table */}
+      {/* ---------------------------------
+          Upload History Table
+         --------------------------------- */}
       <div>
         <h2 className="text-xl font-semibold mb-4">
           Upload History (click row to open dashboard)
@@ -173,6 +186,8 @@ export default function UploadData() {
 
         {loadingTable ? (
           <p>Loading uploads…</p>
+        ) : uploads.length === 0 ? (
+          <p className="text-gray-500">No uploads yet.</p>
         ) : (
           <table className="w-full border">
             <thead className="bg-gray-100">
@@ -193,7 +208,9 @@ export default function UploadData() {
                     className="cursor-pointer hover:bg-blue-50"
                     onClick={() => {
                       if (diseaseId) {
-                        navigate(`/dashboard?diseaseId=${diseaseId}`)
+                        navigate(
+                          `/dashboard?diseaseId=${diseaseId}&country=${u.country}`
+                        )
                       }
                     }}
                   >
