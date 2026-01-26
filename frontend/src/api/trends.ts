@@ -37,15 +37,29 @@ export async function fetchInterestOverTime(
 }
 
 // --------------------------------
-// Aggregated disease signal (multi-keyword mean)
+// Aggregated disease signal
+// Supports optional date range ✅
 // --------------------------------
 export async function fetchAggregatedDiseaseSignal(
   diseaseId: number,
-  countryId: number
+  countryId: number,
+  startDate?: string, // YYYY-MM-DD
+  endDate?: string    // YYYY-MM-DD
 ): Promise<TrendPoint[]> {
-  const res = await fetch(
-    `${API_BASE}/aggregate?disease_id=${diseaseId}&country_id=${countryId}`
-  )
+  const params = new URLSearchParams()
+
+  params.set("disease_id", String(diseaseId))
+  params.set("country_id", String(countryId))
+
+  if (startDate) {
+    params.set("start_date", startDate)
+  }
+
+  if (endDate) {
+    params.set("end_date", endDate)
+  }
+
+  const res = await fetch(`${API_BASE}/aggregate?${params.toString()}`)
 
   if (!res.ok) {
     throw new Error("Failed to fetch aggregated disease signal")
