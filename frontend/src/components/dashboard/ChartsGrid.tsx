@@ -15,9 +15,16 @@ import type { TrendPoint } from "../../api/trends"
 interface Props {
   diseaseId: number
   countryId: number
+  startDate: string // YYYY-MM-DD
+  endDate: string   // YYYY-MM-DD
 }
 
-export default function ChartsGrid({ diseaseId, countryId }: Props) {
+export default function ChartsGrid({
+  diseaseId,
+  countryId,
+  startDate,
+  endDate,
+}: Props) {
   /**
    * data === null  -> loading
    * data.length   -> success
@@ -29,11 +36,16 @@ export default function ChartsGrid({ diseaseId, countryId }: Props) {
   useEffect(() => {
     let cancelled = false
 
-    // Reset state when disease/country changes
+    // Reset state whenever inputs change
     setData(null)
     setError(null)
 
-    fetchAggregatedDiseaseSignal(diseaseId, countryId)
+    fetchAggregatedDiseaseSignal(
+      diseaseId,
+      countryId,
+      startDate,
+      endDate
+    )
       .then(result => {
         if (!cancelled) {
           setData(result)
@@ -41,14 +53,14 @@ export default function ChartsGrid({ diseaseId, countryId }: Props) {
       })
       .catch(() => {
         if (!cancelled) {
-          setError("No Google Trends data uploaded for this disease yet")
+          setError("No Google Trends data for selected range")
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [diseaseId, countryId])
+  }, [diseaseId, countryId, startDate, endDate])
 
   // ---------------- UI STATES ----------------
 
@@ -71,7 +83,7 @@ export default function ChartsGrid({ diseaseId, countryId }: Props) {
   if (!data || data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-500">
-        No data available
+        No data available for selected range
       </div>
     )
   }
@@ -98,6 +110,7 @@ export default function ChartsGrid({ diseaseId, countryId }: Props) {
               stroke="#0ea5e9"
               strokeWidth={2}
               dot={false}
+              isAnimationActive
             />
           </LineChart>
         </ResponsiveContainer>
