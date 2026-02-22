@@ -11,12 +11,35 @@ export type TrendPoint = {
 export type UploadHistoryItem = {
   id: number
   keyword: string
+  disease_id: number
   country: string
   rows_inserted: number
   uploaded_at: string
 }
 
-const API_BASE = "/api/trends"
+// Base path (relies on Vite proxy or same-origin deployment)
+const API_BASE = `${import.meta.env.VITE_API_BASE}/api/trends`
+
+// --------------------------------
+// Helper: Safe fetch wrapper
+// --------------------------------
+async function safeFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, options)
+
+  const contentType = res.headers.get("content-type")
+
+  if (!res.ok) {
+    if (contentType?.includes("application/json")) {
+      const errorData = await res.json()
+      throw new Error(errorData.detail || "Request failed")
+    } else {
+      const text = await res.text()
+      throw new Error(text || "Request failed")
+    }
+  }
+
+  return res.json()
+}
 
 // --------------------------------
 // Interest over time (single keyword)
@@ -25,58 +48,58 @@ export async function fetchInterestOverTime(
   keywordId: number,
   countryId: number
 ): Promise<TrendPoint[]> {
-  const res = await fetch(
+  return safeFetch<TrendPoint[]>(
     `${API_BASE}/interest-over-time?keyword_id=${keywordId}&country_id=${countryId}`
   )
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch Google Trends data")
-  }
-
-  return res.json()
 }
 
 // --------------------------------
 // Aggregated disease signal
-// Supports optional date range ✅
+// Supports optional date range
 // --------------------------------
 export async function fetchAggregatedDiseaseSignal(
   diseaseId: number,
   countryId: number,
-  startDate?: string, // YYYY-MM-DD
-  endDate?: string    // YYYY-MM-DD
+  startDate?: string,
+  endDate?: string
 ): Promise<TrendPoint[]> {
-  const params = new URLSearchParams()
 
+  const params = new URLSearchParams()
   params.set("disease_id", String(diseaseId))
   params.set("country_id", String(countryId))
 
-  if (startDate) {
-    params.set("start_date", startDate)
-  }
+  if (startDate) params.set("start_date", startDate)
+  if (endDate) params.set("end_date", endDate)
 
-  if (endDate) {
-    params.set("end_date", endDate)
-  }
-
-  const res = await fetch(`${API_BASE}/aggregate?${params.toString()}`)
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch aggregated disease signal")
-  }
-
-  return res.json()
+  return safeFetch<TrendPoint[]>(
+    `${API_BASE}/aggregate?${params.toString()}`
+  )
 }
 
 // --------------------------------
-// Upload history (OPTION B – every upload)
+// Upload CSV
+// --------------------------------
+export async function uploadCsv(
+  formData: FormData
+): Promise<{
+  status: string
+  rows_inserted: number
+  date_range: { start: string; end: string }
+}> {
+  return safeFetch(
+    `${API_BASE}/upload-csv`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  )
+}
+
+// --------------------------------
+// Upload history
 // --------------------------------
 export async function fetchUploadHistory(): Promise<UploadHistoryItem[]> {
-  const res = await fetch(`${API_BASE}/uploads`)
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch upload history")
-  }
-
-  return res.json()
+  return safeFetch<UploadHistoryItem[]>(
+    `${API_BASE}/uploads`
+  )
 }

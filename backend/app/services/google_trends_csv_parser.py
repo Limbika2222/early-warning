@@ -1,66 +1,93 @@
 import pandas as pd
-from io import BytesIO
+import io
+import re
 
 
 def parse_google_trends_csv(file_bytes: bytes) -> pd.DataFrame:
     """
-    Definitive Google Trends 'Interest over time' CSV parser.
+    Production-safe Google Trends CSV parser.
 
     Handles:
-    - Any Google Trends export
-    - Mixed metadata rows
+    - Metadata rows at top
+    - "Interest over time" header noise
     - Comma or semicolon delimiters
-    - Excel-modified CSVs
+    - Excel-modified files
+    - Empty lines
+    - Different Google export formats
     """
 
-    text = file_bytes.decode("utf-8", errors="ignore")
-    lines = text.splitlines()
+    try:
+        # ---------------------------------------
+        # Decode safely
+        # ---------------------------------------
+        text = file_bytes.decode("utf-8-sig", errors="ignore")
+        lines = text.splitlines()
 
-    header_index = None
-    delimiter = None
+        if not lines:
+            raise ValueError("Empty CSV file")
 
-    # Step 1: find header row and delimiter
-    for i, line in enumerate(lines):
-        lower = line.lower()
-        if "week" in lower or "date" in lower:
-            header_index = i
-            if "," in line:
-                delimiter = ","
-            elif ";" in line:
-                delimiter = ";"
-            else:
-                raise ValueError("Could not determine delimiter")
-            break
+        # ---------------------------------------
+        # Detect header row dynamically
+        # ---------------------------------------
+        header_index = None
+        delimiter = ","
 
-    if header_index is None:
-        raise ValueError("Could not locate Google Trends header row")
+        for i, line in enumerate(lines):
+            lower = line.lower()
 
-    # Step 2: parse CSV starting from header row
-    df = pd.read_csv(
-        BytesIO(file_bytes),
-        skiprows=header_index,
-        sep=delimiter,
-        engine="python",
-    )
+            if "date" in lower or "week" in lower:
+                header_index = i
 
-    # Step 3: clean columns
-    df = df.dropna(axis=1, how="all")
+                # detect delimiter
+                if ";" in line:
+                    delimiter = ";"
+                elif "," in line:
+                    delimiter = ","
+                else:
+                    raise ValueError("Could not determine CSV delimiter")
 
-    if df.shape[1] < 2:
-        raise ValueError("CSV does not contain interest data")
+                break
 
-    df = df.iloc[:, :2]
-    df.columns = ["date", "interest_index"]
+        if header_index is None:
+            raise ValueError("Could not locate Google Trends header row")
 
-    # Step 4: safe type conversion
-    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
-    df["interest_index"] = pd.to_numeric(
-        df["interest_index"], errors="coerce"
-    )
+        # ---------------------------------------
+        # Reconstruct clean CSV from header row
+        # ---------------------------------------
+        cleaned_csv = "\n".join(lines[header_index:])
 
-    df = df.dropna()
+        df = pd.read_csv(
+            io.StringIO(cleaned_csv),
+            sep=delimiter,
+            engine="python",
+        )
 
-    if df.empty:
-        raise ValueError("CSV contains no valid Google Trends rows")
+        # ---------------------------------------
+        # Clean dataframe
+        # ---------------------------------------
+        df = df.dropna(axis=1, how="all")
 
-    return df
+        if df.shape[1] < 2:
+            raise ValueError("CSV does not contain interest data")
+
+        # Keep first two columns only
+        df = df.iloc[:, :2]
+        df.columns = ["date", "interest_index"]
+
+        # ---------------------------------------
+        # Convert safely
+        # ---------------------------------------
+        df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+        df["interest_index"] = pd.to_numeric(
+            df["interest_index"], errors="coerce"
+        )
+
+        df = df.dropna()
+
+        if df.empty:
+            raise ValueError("CSV contains no valid Google Trends rows")
+
+        return df
+
+    except Exception as e:
+        raise ValueError("Invalid Google Trends CSV format")
