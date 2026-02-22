@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom"
 import { fetchUploadHistory } from "../api/trends"
 import type { UploadHistoryItem } from "../api/trends"
 
+// 🔥 Codespaces backend URL
+const API_BASE = import.meta.env.VITE_API_BASE
+
 // ---------------------------
 // Static reference data
 // ---------------------------
@@ -33,18 +36,12 @@ const countries: CountryOption[] = [
 export default function UploadData() {
   const navigate = useNavigate()
 
-  // ---------------------------
-  // Upload form state
-  // ---------------------------
   const [keyword, setKeyword] = useState("")
   const [country, setCountry] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
 
-  // ---------------------------
-  // Upload history table state
-  // ---------------------------
   const [uploads, setUploads] = useState<UploadHistoryItem[]>([])
   const [loadingTable, setLoadingTable] = useState(false)
 
@@ -56,7 +53,8 @@ export default function UploadData() {
     try {
       const data = await fetchUploadHistory()
       setUploads(data)
-    } catch {
+    } catch (err) {
+      console.error("Upload history error:", err)
       setStatus("❌ Failed to fetch upload history")
     } finally {
       setLoadingTable(false)
@@ -85,54 +83,63 @@ export default function UploadData() {
       formData.append("disease_keyword", keyword)
       formData.append("country_iso2", country)
 
-      const res = await fetch("/api/trends/upload-csv", {
+      const response = await fetch(`${API_BASE}/api/trends/upload-csv`, {
         method: "POST",
         body: formData,
       })
 
-      if (!res.ok) {
-        const errorData = (await res.json()) as { detail?: string }
-        throw new Error(errorData.detail ?? "Upload failed")
+      const contentType = response.headers.get("content-type")
+
+      if (!response.ok) {
+        if (contentType?.includes("application/json")) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || "Upload failed")
+        } else {
+          const text = await response.text()
+          throw new Error(text || "Upload failed")
+        }
       }
 
-      const data = (await res.json()) as {
-        rows_inserted: number
-        date_range: { start: string; end: string }
-      }
+      const data = await response.json()
 
       setStatus(
         `✅ Uploaded ${data.rows_inserted} rows (${data.date_range.start} → ${data.date_range.end})`
       )
 
+      setFile(null)
+      setKeyword("")
+      setCountry("")
       await loadUploads()
+
     } catch (err) {
-      setStatus(err instanceof Error ? `❌ ${err.message}` : "❌ Upload failed")
+      console.error("Upload error:", err)
+      setStatus(
+        err instanceof Error
+          ? `❌ ${err.message}`
+          : "❌ Upload failed"
+      )
     } finally {
       setUploading(false)
     }
   }
 
-  // ---------------------------
-  // Helper: keyword → diseaseId
-  // ---------------------------
   const getDiseaseIdFromKeyword = (kw: string) =>
     diseases.find(d => d.keyword === kw)?.diseaseId
 
-  // ---------------------------
-  // Render
-  // ---------------------------
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-12">
-      {/* ---------------------------------
-          Upload Form
-         --------------------------------- */}
+      
+      {/* ---------------- Upload Form ---------------- */}
       <div>
         <h1 className="text-2xl font-semibold mb-6">
           Upload Google Trends Data
         </h1>
 
         <div className="bg-white p-6 rounded shadow space-y-5">
+
           <select
+            id="disease"
+            name="disease"
             className="w-full border rounded px-3 py-2"
             value={keyword}
             onChange={e => setKeyword(e.target.value)}
@@ -146,6 +153,8 @@ export default function UploadData() {
           </select>
 
           <select
+            id="country"
+            name="country"
             className="w-full border rounded px-3 py-2"
             value={country}
             onChange={e => setCountry(e.target.value)}
@@ -159,6 +168,8 @@ export default function UploadData() {
           </select>
 
           <input
+            id="csvFile"
+            name="csvFile"
             type="file"
             accept=".csv"
             onChange={e => setFile(e.target.files?.[0] ?? null)}
@@ -172,13 +183,15 @@ export default function UploadData() {
             {uploading ? "Uploading…" : "Upload CSV"}
           </button>
 
-          {status && <p className="text-sm">{status}</p>}
+          {status && (
+            <p className="text-sm mt-2">
+              {status}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* ---------------------------------
-          Upload History Table
-         --------------------------------- */}
+      {/* ---------------- Upload History ---------------- */}
       <div>
         <h2 className="text-xl font-semibold mb-4">
           Upload History (click row to open dashboard)

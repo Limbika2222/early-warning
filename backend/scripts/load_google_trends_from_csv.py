@@ -14,13 +14,33 @@ from app.models.google_trends import (
 # Database session
 # --------------------
 Session = sessionmaker(bind=engine)
-db = Session()
+
 
 # --------------------
-# Project paths
+# Project paths (ROBUST VERSION)
 # --------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+def resolve_project_root() -> Path:
+    """
+    Walk upward from this file until we find
+    the 'early-warning-dashboard' directory.
+    This avoids fragile .parents[n] assumptions.
+    """
+    current = Path(__file__).resolve()
+
+    while current.name != "early-warning-dashboard":
+        if current.parent == current:
+            raise RuntimeError("Could not locate 'early-warning-dashboard' root")
+        current = current.parent
+
+    return current
+
+
+PROJECT_ROOT = resolve_project_root()
+
 DATA_DIR = PROJECT_ROOT / "data" / "raw" / "google_trends_interest"
+
+print("📁 Project root resolved to:", PROJECT_ROOT)
+print("📁 Data directory resolved to:", DATA_DIR)
 
 
 def load_google_trends_csv(
@@ -30,89 +50,90 @@ def load_google_trends_csv(
 ) -> None:
     """
     Load Google Trends 'Interest over time' CSV into the database.
-
-    Assumptions:
-    - CSV downloaded from Google Trends -> Interest over time
-    - First row is metadata (e.g. 'Category: Health')
-    - Second row is header
     """
 
-    csv_path = DATA_DIR / filename
+    db = Session()
 
-    if not csv_path.exists():
-        print(f"❌ File not found: {csv_path}")
-        return
+    try:
+        csv_path = DATA_DIR / filename
 
-    # --------------------
-    # Read & normalize CSV
-    # --------------------
-    df = pd.read_csv(csv_path, skiprows=1)
-    df.columns = ["date", "interest_index"]
+        print("🔍 Looking for file at:", csv_path)
 
-    # Drop missing or invalid rows
-    df = df.dropna(subset=["date", "interest_index"])
+        if not csv_path.exists():
+            print(f"❌ File not found: {csv_path}")
+            return
 
-    # --------------------
-    # Resolve foreign keys
-    # --------------------
-    keyword = (
-        db.query(GoogleTrendsKeyword)
-        .filter(GoogleTrendsKeyword.keyword_text == keyword_text)
-        .first()
-    )
+        # --------------------
+        # Read & normalize CSV
+        # --------------------
+        df = pd.read_csv(csv_path, skiprows=1)
+        df.columns = ["date", "interest_index"]
 
-    country = (
-        db.query(Country)
-        .filter(Country.iso2 == country_iso2)
-        .first()
-    )
+        df = df.dropna(subset=["date", "interest_index"])
 
-    if not keyword or not country:
-        print(f"❌ Keyword or country not found: {keyword_text}, {country_iso2}")
-        return
-
-    # --------------------
-    # Insert time-series
-    # --------------------
-    inserted = 0
-    skipped = 0
-
-    for _, row in df.iterrows():
-        date_value = pd.to_datetime(row["date"]).date()
-
-        # Prevent duplicate inserts
-        exists = (
-            db.query(GoogleTrendsTimeseries)
-            .filter(
-                GoogleTrendsTimeseries.keyword_id == keyword.id,
-                GoogleTrendsTimeseries.country_id == country.id,
-                GoogleTrendsTimeseries.date == date_value,
-            )
+        # --------------------
+        # Resolve foreign keys
+        # --------------------
+        keyword = (
+            db.query(GoogleTrendsKeyword)
+            .filter(GoogleTrendsKeyword.keyword_text == keyword_text)
             .first()
         )
 
-        if exists:
-            skipped += 1
-            continue
-
-        record = GoogleTrendsTimeseries(
-            keyword_id=keyword.id,
-            country_id=country.id,
-            date=date_value,
-            interest_index=int(row["interest_index"]),
-            source="google_trends_csv",
-            fetched_at=datetime.now(timezone.utc),
+        country = (
+            db.query(Country)
+            .filter(Country.iso2 == country_iso2)
+            .first()
         )
 
-        db.add(record)
-        inserted += 1
+        if not keyword or not country:
+            print(f"❌ Keyword or country not found: {keyword_text}, {country_iso2}")
+            return
 
-    db.commit()
+        # --------------------
+        # Insert time-series
+        # --------------------
+        inserted = 0
+        skipped = 0
 
-    print(
-        f"✅ Loaded {inserted} rows from {filename} "
-        f"(skipped {skipped} duplicates)"
-    )
+        for _, row in df.iterrows():
+            date_value = pd.to_datetime(row["date"]).date()
+
+            exists = (
+                db.query(GoogleTrendsTimeseries)
+                .filter(
+                    GoogleTrendsTimeseries.keyword_id == keyword.id,
+                    GoogleTrendsTimeseries.country_id == country.id,
+                    GoogleTrendsTimeseries.date == date_value,
+                )
+                .first()
+            )
+
+            if exists:
+                skipped += 1
+                continue
+
+            record = GoogleTrendsTimeseries(
+                keyword_id=keyword.id,
+                country_id=country.id,
+                date=date_value,
+                interest_index=int(row["interest_index"]),
+                source="google_trends_csv",
+                fetched_at=datetime.now(timezone.utc),
+            )
+
+            db.add(record)
+            inserted += 1
+
+        db.commit()
+
+        print(
+            f"✅ Loaded {inserted} rows from {filename} "
+            f"(skipped {skipped} duplicates)"
+        )
+
+    finally:
+        db.close()
 
 
 # --------------------

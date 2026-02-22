@@ -15,17 +15,25 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, currentUser => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setLoading(false)
     })
     return unsub
   }, [])
 
+  // 🔄 Loading Screen
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen text-gray-500">
-        Loading application…
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700">
+        <div className="text-center">
+          <div className="animate-pulse text-white text-2xl font-semibold">
+            Infodemiology Intelligence Platform
+          </div>
+          <p className="text-blue-100 mt-2 text-sm">
+            Initializing Early Warning System…
+          </p>
+        </div>
       </div>
     )
   }
@@ -33,13 +41,13 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        {/* Public */}
+        {/* Public Route */}
         <Route
           path="/login"
           element={user ? <Navigate to="/" /> : <Login />}
         />
 
-        {/* Protected layout */}
+        {/* Protected Layout */}
         <Route
           element={user ? <AppLayout /> : <Navigate to="/login" />}
         >

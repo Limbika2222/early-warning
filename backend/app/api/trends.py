@@ -7,9 +7,13 @@ from fastapi import (
     Form,
 )
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, date
 from typing import Optional
 from collections import defaultdict
+import pandas as pd
+import io
 
 from app.utils.database import SessionLocal
 from app.models.google_trends import (
@@ -18,7 +22,6 @@ from app.models.google_trends import (
     GoogleTrendsUpload,
     Country,
 )
-from app.services.google_trends_csv_parser import parse_google_trends_csv
 
 router = APIRouter(prefix="/api/trends", tags=["trends"])
 
@@ -35,7 +38,51 @@ def get_db():
 
 
 # ---------------------------------
-# GET: Interest over time (single keyword)
+# CSV PARSER (Robust Version)
+# ---------------------------------
+def parse_google_trends_csv(contents: bytes):
+    try:
+        df = pd.read_csv(io.BytesIO(contents), skiprows=1)
+
+        if df.shape[1] < 2:
+            raise ValueError("Invalid column structure")
+
+        # Normalize to 2 columns only
+        df = df.iloc[:, 0:2]
+        df.columns = ["date", "interest_index"]
+
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        df["interest_index"] = (
+            df["interest_index"]
+            .astype(str)
+            .str.replace("<1", "0")
+        )
+
+        df["interest_index"] = pd.to_numeric(
+            df["interest_index"],
+            errors="coerce"
+        )
+
+        df = df.dropna(subset=["date", "interest_index"])
+
+        if df.empty:
+            raise ValueError("No valid rows found")
+
+        # Convert to Python date objects
+        df["date"] = df["date"].dt.date
+
+        return df
+
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Google Trends CSV format",
+        )
+
+
+# ---------------------------------
+# GET: Interest over time
 # ---------------------------------
 @router.get("/interest-over-time")
 def interest_over_time(
@@ -75,9 +122,7 @@ async def upload_google_trends_csv(
     country_iso2: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    # -------------------------
     # Validate keyword
-    # -------------------------
     keyword = (
         db.query(GoogleTrendsKeyword)
         .filter(GoogleTrendsKeyword.keyword_text == disease_keyword)
@@ -86,9 +131,7 @@ async def upload_google_trends_csv(
     if not keyword:
         raise HTTPException(status_code=400, detail="Unknown disease keyword")
 
-    # -------------------------
     # Validate country
-    # -------------------------
     country = (
         db.query(Country)
         .filter(Country.iso2 == country_iso2)
@@ -97,51 +140,63 @@ async def upload_google_trends_csv(
     if not country:
         raise HTTPException(status_code=400, detail="Unknown country")
 
-    # -------------------------
-    # Parse CSV
-    # -------------------------
     contents = await file.read()
+    df = parse_google_trends_csv(contents)
 
-    try:
-        df = parse_google_trends_csv(contents)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # -------------------------
-    # Insert timeseries rows
-    # -------------------------
     rows_inserted = 0
 
-    for _, row in df.iterrows():
+    try:
+        for _, row in df.iterrows():
+
+            exists = (
+                db.query(GoogleTrendsTimeseries)
+                .filter(
+                    and_(
+                        GoogleTrendsTimeseries.keyword_id == keyword.id,
+                        GoogleTrendsTimeseries.country_id == country.id,
+                        GoogleTrendsTimeseries.date == row["date"],
+                    )
+                )
+                .first()
+            )
+
+            if exists:
+                continue
+
+            db.add(
+                GoogleTrendsTimeseries(
+                    keyword_id=keyword.id,
+                    country_id=country.id,
+                    date=row["date"],
+                    interest_index=int(row["interest_index"]),
+                    source="google_trends_csv",
+                    fetched_at=datetime.utcnow(),
+                )
+            )
+
+            rows_inserted += 1
+
+        # Record upload history
         db.add(
-            GoogleTrendsTimeseries(
+            GoogleTrendsUpload(
                 keyword_id=keyword.id,
                 country_id=country.id,
-                date=row["date"],
-                interest_index=int(row["interest_index"]),
-                source="google_trends_csv",
-                fetched_at=datetime.utcnow(),
+                rows_inserted=rows_inserted,
+                uploaded_at=datetime.utcnow(),
             )
         )
-        rows_inserted += 1
 
-    # -------------------------
-    # Record upload history
-    # -------------------------
-    db.add(
-        GoogleTrendsUpload(
-            keyword_id=keyword.id,
-            country_id=country.id,
-            rows_inserted=rows_inserted,
-            uploaded_at=datetime.utcnow(),
+        db.commit()
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Duplicate data detected in upload",
         )
-    )
-
-    db.commit()
 
     return {
         "status": "success",
-        "disease_id": keyword.disease_id,
         "rows_inserted": rows_inserted,
         "date_range": {
             "start": df["date"].min().isoformat(),
@@ -151,7 +206,7 @@ async def upload_google_trends_csv(
 
 
 # ---------------------------------
-# GET: Upload history (EVERY upload)
+# GET: Upload history
 # ---------------------------------
 @router.get("/uploads")
 def list_upload_history(
@@ -187,19 +242,15 @@ def list_upload_history(
 
 # ---------------------------------
 # GET: Aggregated disease signal
-# Supports date range filtering ✅
 # ---------------------------------
 @router.get("/aggregate")
 def aggregate_disease_signal(
     disease_id: int,
     country_id: int,
-    start_date: Optional[date] = None,  # YYYY-MM-DD
-    end_date: Optional[date] = None,    # YYYY-MM-DD
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    # -------------------------
-    # Fetch keywords for disease
-    # -------------------------
     keywords = (
         db.query(GoogleTrendsKeyword)
         .filter(GoogleTrendsKeyword.disease_id == disease_id)
@@ -211,9 +262,6 @@ def aggregate_disease_signal(
 
     keyword_ids = [k.id for k in keywords]
 
-    # -------------------------
-    # Build query
-    # -------------------------
     query = (
         db.query(
             GoogleTrendsTimeseries.date,
@@ -225,9 +273,6 @@ def aggregate_disease_signal(
         )
     )
 
-    # -------------------------
-    # Apply date filters (if provided)
-    # -------------------------
     if start_date:
         query = query.filter(GoogleTrendsTimeseries.date >= start_date)
 
@@ -239,9 +284,6 @@ def aggregate_disease_signal(
     if not rows:
         raise HTTPException(status_code=404, detail="No data for aggregation")
 
-    # -------------------------
-    # Aggregate (mean per day)
-    # -------------------------
     grouped = defaultdict(list)
 
     for r in rows:
