@@ -17,13 +17,32 @@ export type UploadHistoryItem = {
   uploaded_at: string
 }
 
-// Base path (relies on Vite proxy or same-origin deployment)
-const API_BASE = `${import.meta.env.VITE_API_BASE}/api/trends`
+// --------------------------------
+// Environment validation
+// --------------------------------
+const RAW_BASE = import.meta.env.VITE_API_BASE
+
+if (!RAW_BASE) {
+  throw new Error(
+    "VITE_API_BASE is not defined. Check your frontend/.env file."
+  )
+}
+
+// Ensure no trailing slash
+const CLEAN_BASE = RAW_BASE.endsWith("/")
+  ? RAW_BASE.slice(0, -1)
+  : RAW_BASE
+
+// Final API base for trends routes
+const API_BASE = `${CLEAN_BASE}/api/trends`
 
 // --------------------------------
 // Helper: Safe fetch wrapper
 // --------------------------------
-async function safeFetch<T>(url: string, options?: RequestInit): Promise<T> {
+async function safeFetch<T>(
+  url: string,
+  options?: RequestInit
+): Promise<T> {
   const res = await fetch(url, options)
 
   const contentType = res.headers.get("content-type")
@@ -55,7 +74,6 @@ export async function fetchInterestOverTime(
 
 // --------------------------------
 // Aggregated disease signal
-// Supports optional date range
 // --------------------------------
 export async function fetchAggregatedDiseaseSignal(
   diseaseId: number,
@@ -96,7 +114,7 @@ export async function uploadCsv(
 }
 
 // --------------------------------
-// Upload history
+// Upload history (CORRECT ROUTE)
 // --------------------------------
 export async function fetchUploadHistory(): Promise<UploadHistoryItem[]> {
   return safeFetch<UploadHistoryItem[]>(
