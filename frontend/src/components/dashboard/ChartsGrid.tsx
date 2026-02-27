@@ -43,7 +43,7 @@ interface Props {
   }) => void
 }
 
-const COLORS = ["#22c55e", "#f59e0b", "#ef4444"]
+const COLORS = ["#1f9c94", "#4f8ef7", "#7dd3fc"]
 
 export default function ChartsGrid({
   source,
@@ -53,6 +53,7 @@ export default function ChartsGrid({
   endDate,
   onMetricsChange,
 }: Props) {
+
   const [data, setData] = useState<TrendPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +78,7 @@ export default function ChartsGrid({
           const trend = response?.trend_data ?? []
           setData(trend)
 
-          const risk = response?.risk_level ?? response?.metrics?.risk_level ?? "Low"
+          const risk = response?.metrics?.risk_level ?? "Low"
           setRiskLevel(risk)
 
           if (onMetricsChange && response?.metrics) {
@@ -96,7 +97,9 @@ export default function ChartsGrid({
           setData([])
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
@@ -104,21 +107,16 @@ export default function ChartsGrid({
     return () => { cancelled = true }
   }, [source, diseaseId, countryId, startDate, endDate, onMetricsChange])
 
-  if (loading)
-    return <div className="flex items-center justify-center h-48">Loading…</div>
+  if (loading) return <div className="flex items-center justify-center h-48">Loading…</div>
+  if (error) return <div className="text-red-500">{error}</div>
+  if (!data.length) return <div>No data available</div>
 
-  if (error)
-    return <div className="text-red-500">{error}</div>
-
-  if (!data.length)
-    return <div>No data available</div>
-
-  // ================= RISK BACKGROUND =================
+  // ================= RISK COLOR LOGIC =================
 
   const riskColors: Record<string, string> = {
-    Low: "rgba(34,197,94,0.08)",
-    Medium: "rgba(245,158,11,0.10)",
-    High: "rgba(239,68,68,0.12)",
+    Low: "rgba(34,197,94,0.08)",     // green
+    Medium: "rgba(251,191,36,0.10)", // amber
+    High: "rgba(239,68,68,0.10)",    // red
   }
 
   const overlayColor = riskColors[riskLevel] || "transparent"
@@ -150,10 +148,14 @@ export default function ChartsGrid({
   return (
     <motion.div
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1, backgroundColor: overlayColor }}
+      animate={{
+        opacity: 1,
+        backgroundColor: overlayColor,
+      }}
       transition={{ duration: 0.6 }}
       className="space-y-8 p-4 rounded-2xl"
     >
+
       {/* ================= MAIN SURVEILLANCE CHART ================= */}
 
       <ChartCard title={`Disease Signal Surveillance (${source.toUpperCase()})`}>
@@ -165,18 +167,15 @@ export default function ChartsGrid({
             <Tooltip />
             <Legend />
 
-            {/* Raw Signal */}
             <Line
               type="monotone"
               dataKey="value"
               name="Signal"
-              stroke="#0ea5e9"
+              stroke="#1f9c94"
               strokeWidth={2.5}
               dot={false}
-              animationDuration={800}
             />
 
-            {/* EWMA */}
             <Line
               type="monotone"
               dataKey="ewma"
@@ -185,10 +184,8 @@ export default function ChartsGrid({
               strokeWidth={2}
               strokeDasharray="6 4"
               dot={false}
-              animationDuration={1000}
             />
 
-            {/* UCL */}
             <Line
               type="monotone"
               dataKey="ucl"
@@ -197,10 +194,8 @@ export default function ChartsGrid({
               strokeWidth={1.5}
               strokeDasharray="3 3"
               dot={false}
-              animationDuration={1000}
             />
 
-            {/* Spike Markers */}
             {data.map((point, index) =>
               point.is_spike ? (
                 <ReferenceDot
@@ -222,58 +217,43 @@ export default function ChartsGrid({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* Animated Pie */}
         <ChartCard title="Signal Intensity Distribution">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6 }}
-          >
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  outerRadius={95}
-                  innerRadius={55}
-                  paddingAngle={4}
-                  isAnimationActive
-                  animationDuration={900}
-                  animationEasing="ease-out"
-                  activeOuterRadius={105}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell
-                      key={index}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </motion.div>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                dataKey="value"
+                outerRadius={90}
+                innerRadius={50}
+                paddingAngle={4}
+              >
+                {pieData.map((_, index) => (
+                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
         </ChartCard>
 
-        {/* Weekly Bar */}
         <ChartCard title="Weekly Average Signal">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#cfe9e7" />
               <XAxis dataKey="week" />
               <YAxis />
               <Tooltip />
               <Bar
                 dataKey="value"
-                fill="#3b82f6"
+                fill="#4f8ef7"
                 radius={[8, 8, 0, 0]}
-                animationDuration={800}
               />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
       </div>
+
     </motion.div>
   )
 }

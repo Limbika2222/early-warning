@@ -1,16 +1,18 @@
-export interface SignalMetrics {
-  signal_index: number
-  spike_count: number
-  risk_level: string
+export interface TrendPoint {
+  date: string
+  value: number
+  ewma?: number
+  ucl?: number
+  is_spike?: boolean
 }
 
 export interface SignalResponse {
   source: string
-  metrics: SignalMetrics
-  trend_data: {
-    date: string
-    value: number
-  }[]
+  trend_data: TrendPoint[]
+  signal_index: number
+  spike_count: number
+  momentum_percent?: number
+  risk_level: string
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE
@@ -22,6 +24,7 @@ export async function fetchSignalData(
   startDate: string,
   endDate: string
 ): Promise<SignalResponse> {
+
   const params = new URLSearchParams({
     source,
     disease_id: diseaseId.toString(),
@@ -39,5 +42,7 @@ export async function fetchSignalData(
     throw new Error("Failed to fetch signal data")
   }
 
-  return res.json()
+  const data: SignalResponse = await res.json()
+
+  return data
 }
