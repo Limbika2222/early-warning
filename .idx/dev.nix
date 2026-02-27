@@ -6,9 +6,9 @@
   packages = [
     pkgs.python311
     pkgs.nodejs_20
-    pkgs.nodePackages.npm
     pkgs.sqlite
     pkgs.stdenv.cc.cc.lib
+    pkgs.openssh
   ];
 
   env = {
