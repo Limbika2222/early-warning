@@ -2,9 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-# Import routers
+# -------------------------------------------------
+# Import Routers (IMPORTANT: renamed signal → signal_api)
+# -------------------------------------------------
 from app.api import trends
-from app.api import signal
+from app.api import signal_api
 
 
 # -------------------------------------------------
@@ -42,7 +44,7 @@ app.add_middleware(
 # Register API Routers
 # -------------------------------------------------
 app.include_router(trends.router)
-app.include_router(signal.router)
+app.include_router(signal_api.router)
 
 
 # -------------------------------------------------

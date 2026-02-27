@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import {
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -12,6 +12,8 @@ import {
   Cell,
   BarChart,
   Bar,
+  ReferenceDot,
+  Legend,
 } from "recharts"
 
 import { motion } from "framer-motion"
@@ -23,14 +25,17 @@ type DataSource = "google" | "twitter" | "who"
 interface TrendPoint {
   date: string
   value: number
+  ewma?: number
+  ucl?: number
+  is_spike?: boolean
 }
 
 interface Props {
   source: DataSource
   diseaseId: number
   countryId: number
-  startDate?: string   // ✅ optional now
-  endDate?: string     // ✅ optional now
+  startDate?: string
+  endDate?: string
   onMetricsChange?: (metrics: {
     signalIndex: number
     spikeCount: number
@@ -38,17 +43,7 @@ interface Props {
   }) => void
 }
 
-interface PieDataItem {
-  name: string
-  value: number
-}
-
-interface WeeklyDataItem {
-  week: string
-  value: number
-}
-
-const COLORS = ["#1f9c94", "#4f8ef7", "#7dd3fc"]
+const COLORS = ["#22c55e", "#f59e0b", "#ef4444"]
 
 export default function ChartsGrid({
   source,
@@ -61,6 +56,7 @@ export default function ChartsGrid({
   const [data, setData] = useState<TrendPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [riskLevel, setRiskLevel] = useState<string>("Low")
 
   useEffect(() => {
     let cancelled = false
@@ -73,19 +69,22 @@ export default function ChartsGrid({
           source,
           diseaseId,
           countryId,
-          startDate ?? "",   // ✅ safe fallback
-          endDate ?? ""      // ✅ safe fallback
+          startDate ?? "",
+          endDate ?? ""
         )
 
         if (!cancelled) {
           const trend = response?.trend_data ?? []
           setData(trend)
 
+          const risk = response?.risk_level ?? response?.metrics?.risk_level ?? "Low"
+          setRiskLevel(risk)
+
           if (onMetricsChange && response?.metrics) {
             onMetricsChange({
               signalIndex: response.metrics.signal_index ?? 0,
               spikeCount: response.metrics.spike_count ?? 0,
-              riskLevel: response.metrics.risk_level ?? "Unknown",
+              riskLevel: risk,
             })
           }
 
@@ -97,40 +96,36 @@ export default function ChartsGrid({
           setData([])
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+        if (!cancelled) setLoading(false)
       }
     }
 
     loadData()
-
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [source, diseaseId, countryId, startDate, endDate, onMetricsChange])
 
-  // ================= STATES =================
+  if (loading)
+    return <div className="flex items-center justify-center h-48">Loading…</div>
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-48 text-[#1e3f42]">
-        Loading charts…
-      </div>
-    )
-  }
-
-  if (error) {
+  if (error)
     return <div className="text-red-500">{error}</div>
+
+  if (!data.length)
+    return <div>No data available</div>
+
+  // ================= RISK BACKGROUND =================
+
+  const riskColors: Record<string, string> = {
+    Low: "rgba(34,197,94,0.08)",
+    Medium: "rgba(245,158,11,0.10)",
+    High: "rgba(239,68,68,0.12)",
   }
 
-  if (!data.length) {
-    return <div className="text-[#3b6b6f]">No data available</div>
-  }
+  const overlayColor = riskColors[riskLevel] || "transparent"
 
   // ================= PIE DATA =================
 
-  const pieData: PieDataItem[] = [
+  const pieData = [
     { name: "Low", value: data.filter(d => d.value < 40).length },
     { name: "Medium", value: data.filter(d => d.value >= 40 && d.value < 70).length },
     { name: "High", value: data.filter(d => d.value >= 70).length },
@@ -142,117 +137,137 @@ export default function ChartsGrid({
 
   data.forEach((point, index) => {
     const week = Math.floor(index / 7)
-
-    if (!weeklyMap[week]) {
-      weeklyMap[week] = { total: 0, count: 0 }
-    }
-
+    if (!weeklyMap[week]) weeklyMap[week] = { total: 0, count: 0 }
     weeklyMap[week].total += point.value
     weeklyMap[week].count += 1
   })
 
-  const weeklyData: WeeklyDataItem[] = Object.entries(weeklyMap).map(
-    ([weekIndex, value]) => ({
-      week: `W${Number(weekIndex) + 1}`,
-      value: Math.round(value.total / value.count),
-    })
-  )
-
-  // ================= UI =================
+  const weeklyData = Object.entries(weeklyMap).map(([weekIndex, value]) => ({
+    week: `W${Number(weekIndex) + 1}`,
+    value: Math.round(value.total / value.count),
+  }))
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-8"
+      animate={{ opacity: 1, backgroundColor: overlayColor }}
+      transition={{ duration: 0.6 }}
+      className="space-y-8 p-4 rounded-2xl"
     >
-      {/* ================= MAIN AREA CHART ================= */}
-      <ChartCard title={`Disease Signal Trend (${source.toUpperCase()})`}>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient id="signalGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#1f9c94" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#1f9c94" stopOpacity={0} />
-              </linearGradient>
-            </defs>
+      {/* ================= MAIN SURVEILLANCE CHART ================= */}
 
-            <CartesianGrid strokeDasharray="3 3" stroke="#cfe9e7" />
+      <ChartCard title={`Disease Signal Surveillance (${source.toUpperCase()})`}>
+        <ResponsiveContainer width="100%" height={340}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="date" hide />
+            <YAxis />
+            <Tooltip />
+            <Legend />
 
-            <XAxis
-              dataKey="date"
-              stroke="#3b6b6f"
-              tick={{ fill: "#3b6b6f", fontSize: 11 }}
-              hide
-            />
-
-            <YAxis
-              stroke="#3b6b6f"
-              tick={{ fill: "#3b6b6f", fontSize: 11 }}
-            />
-
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "white",
-                borderRadius: "12px",
-                border: "1px solid #e2f3f2",
-                color: "#1e3f42",
-              }}
-              cursor={{ stroke: "#1f9c94", strokeWidth: 1 }}
-            />
-
-            <Area
+            {/* Raw Signal */}
+            <Line
               type="monotone"
               dataKey="value"
-              stroke="#1f9c94"
-              strokeWidth={3}
-              fill="url(#signalGradient)"
+              name="Signal"
+              stroke="#0ea5e9"
+              strokeWidth={2.5}
               dot={false}
-              activeDot={{
-                r: 6,
-                stroke: "#1f9c94",
-                strokeWidth: 2,
-                fill: "white",
-              }}
               animationDuration={800}
             />
-          </AreaChart>
+
+            {/* EWMA */}
+            <Line
+              type="monotone"
+              dataKey="ewma"
+              name="EWMA"
+              stroke="#7c3aed"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              dot={false}
+              animationDuration={1000}
+            />
+
+            {/* UCL */}
+            <Line
+              type="monotone"
+              dataKey="ucl"
+              name="Control Limit"
+              stroke="#ef4444"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              dot={false}
+              animationDuration={1000}
+            />
+
+            {/* Spike Markers */}
+            {data.map((point, index) =>
+              point.is_spike ? (
+                <ReferenceDot
+                  key={index}
+                  x={point.date}
+                  y={point.value}
+                  r={6}
+                  fill="#ef4444"
+                  stroke="white"
+                  strokeWidth={2}
+                />
+              ) : null
+            )}
+          </LineChart>
         </ResponsiveContainer>
       </ChartCard>
 
       {/* ================= LOWER GRID ================= */}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
+        {/* Animated Pie */}
         <ChartCard title="Signal Intensity Distribution">
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                dataKey="value"
-                outerRadius={90}
-                innerRadius={50}
-                paddingAngle={4}
-              >
-                {pieData.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6 }}
+          >
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  outerRadius={95}
+                  innerRadius={55}
+                  paddingAngle={4}
+                  isAnimationActive
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                  activeOuterRadius={105}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell
+                      key={index}
+                      fill={COLORS[index % COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </motion.div>
         </ChartCard>
 
+        {/* Weekly Bar */}
         <ChartCard title="Weekly Average Signal">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#cfe9e7" />
-              <XAxis dataKey="week" stroke="#3b6b6f" />
-              <YAxis stroke="#3b6b6f" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="week" />
+              <YAxis />
               <Tooltip />
               <Bar
                 dataKey="value"
-                fill="#4f8ef7"
+                fill="#3b82f6"
                 radius={[8, 8, 0, 0]}
+                animationDuration={800}
               />
             </BarChart>
           </ResponsiveContainer>
