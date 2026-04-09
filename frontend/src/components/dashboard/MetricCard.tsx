@@ -2,11 +2,18 @@ import { motion } from "framer-motion"
 
 type Props = {
   title: string
-  value: string
+  value: string | number
+  subtitle?: string
+  color?: "blue" | "red" | "green" | "yellow"
   change?: string
 }
 
-export default function MetricCard({ title, value, change }: Props) {
+export default function MetricCard({
+  title,
+  value,
+  subtitle,
+  change,
+}: Props) {
   const isPositive = change?.startsWith("+")
   const isNegative = change?.startsWith("-")
 
@@ -15,7 +22,7 @@ export default function MetricCard({ title, value, change }: Props) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="
+      className={`
         bg-white/50
         backdrop-blur-md
         rounded-2xl
@@ -23,16 +30,14 @@ export default function MetricCard({ title, value, change }: Props) {
         border border-white/40
         shadow-md
         transition-all
-      "
+      `}
     >
       <p className="text-sm text-[#3b6b6f] font-medium tracking-wide">
         {title}
       </p>
 
       <div className="flex items-center justify-between mt-2">
-        <h2 className="text-3xl font-bold text-[#1e3f42]">
-          {value}
-        </h2>
+        <h2 className="text-3xl font-bold text-[#1e3f42]">{value}</h2>
 
         {change && (
           <span
@@ -51,6 +56,9 @@ export default function MetricCard({ title, value, change }: Props) {
           </span>
         )}
       </div>
+      {subtitle && (
+        <p className="text-xs text-[#3b6b6f] mt-1">{subtitle}</p>
+      )}
     </motion.div>
   )
 }

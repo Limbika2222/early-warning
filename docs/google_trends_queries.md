@@ -19,6 +19,9 @@ of infectious disease outbreaks.
 - influenza
 - सर्दी जुकाम
 - फ्लू के लक्षण
+- fever
+- cough
+- fatigue
 
 ---
 

@@ -1,35 +1,34 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 # -------------------------------------------------
-# Import Routers (IMPORTANT: renamed signal → signal_api)
+# Import Routers
 # -------------------------------------------------
 from app.api import trends
 from app.api import signal_api
+from app.api.upload_api import router as upload_router
+from app.api.analysis_api import router as analysis_router
+from app.api.alert_api import router as alert_router
 
+# ✅ ADD THIS
+from app.api.ranking_api import router as ranking_router
 
 # -------------------------------------------------
 # Create FastAPI Application
 # -------------------------------------------------
 app = FastAPI(
     title="Infodemiology Early Warning System API",
-    version="1.0.0",
-    description="Unified analytics API for Google Trends, Twitter, WHO, and ML-based outbreak detection",
+    version="2.4.0",
 )
 
-
 # -------------------------------------------------
-# CORS Configuration
+# 🚀 CORS (IMPORTANT FOR FRONTEND)
 # -------------------------------------------------
-# In development we allow all origins.
-# In production you should restrict this.
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")
-
-if ALLOWED_ORIGINS == "*":
-    origins = ["*"]
-else:
-    origins = [origin.strip() for origin in ALLOWED_ORIGINS.split(",")]
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://5173-firebase-early-warning-1772198111524.cluster-fdkw7vjj7bgguspe3fbbc25tra.cloudworkstations.dev",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,28 +38,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -------------------------------------------------
+# Register Routers
+# -------------------------------------------------
 
-# -------------------------------------------------
-# Register API Routers
-# -------------------------------------------------
+# Upload
+app.include_router(upload_router)
+
+# Existing
 app.include_router(trends.router)
 app.include_router(signal_api.router)
 
+# Analysis
+app.include_router(
+    analysis_router,
+    prefix="/analysis",
+    tags=["Analysis"]
+)
+
+# Alerts
+app.include_router(
+    alert_router,
+    prefix="/alerts",
+    tags=["Alerts"]
+)
+
+# 🔥 ADD THIS (VERY IMPORTANT)
+app.include_router(ranking_router)
 
 # -------------------------------------------------
-# Root Endpoint
+# Root
 # -------------------------------------------------
 @app.get("/")
 def root():
-    return {
-        "status": "API running",
-        "service": "Infodemiology Early Warning System",
-        "version": "1.0.0",
-    }
-
+    return {"status": "API running"}
 
 # -------------------------------------------------
-# Health Check Endpoint
+# Health
 # -------------------------------------------------
 @app.get("/health")
 def health_check():

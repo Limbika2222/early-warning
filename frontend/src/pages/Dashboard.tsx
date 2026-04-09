@@ -41,6 +41,22 @@ export default function Dashboard() {
     Philippines: 5,
   }
 
+  // ================= RISK COLOR =================
+  const getRiskColor = (
+    risk: string
+  ): "blue" | "red" | "green" | "yellow" => {
+    switch (risk) {
+      case "HIGH":
+        return "red"
+      case "MEDIUM":
+        return "yellow"
+      case "LOW":
+        return "green"
+      default:
+        return "blue"
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -48,7 +64,6 @@ export default function Dashboard() {
       transition={{ duration: 0.4 }}
       className="space-y-8"
     >
-
       {/* ================= UPLOAD SELECTOR ================= */}
       <div className="bg-white/50 backdrop-blur-md rounded-2xl p-6 border border-white/40 shadow-md">
         <DashboardUploadSelector
@@ -64,10 +79,27 @@ export default function Dashboard() {
 
       {/* ================= METRICS ================= */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <MetricCard title="Signal Index" value={signalIndex.toString()} />
-        <MetricCard title="Spikes Detected" value={spikeCount.toString()} />
-        <MetricCard title="Risk Level" value={riskLevel} />
-      </div>
+  <MetricCard
+    title="Signal Index"
+    value={signalIndex.toFixed(2)}
+    subtitle="Outbreak risk indicator"
+    color="blue"
+  />
+
+  <MetricCard
+    title="Spikes Detected"
+    value={spikeCount}
+    subtitle="EWMA spike signals"
+    color="yellow"
+  />
+
+  <MetricCard
+    title="Risk Level"
+    value={riskLevel}
+    subtitle="Current disease risk"
+    color={getRiskColor(riskLevel)}
+  />
+</div>
 
       {/* ================= DATA SOURCE ================= */}
       <div className="flex justify-center">
@@ -105,14 +137,17 @@ export default function Dashboard() {
           countryId={countryId}
           startDate={startDate || undefined}
           endDate={endDate || undefined}
-          onMetricsChange={(metrics) => {
+          onMetricsChange={(metrics: {
+            signalIndex: number
+            spikeCount: number
+            riskLevel: string
+          }) => {
             setSignalIndex(metrics.signalIndex)
             setSpikeCount(metrics.spikeCount)
             setRiskLevel(metrics.riskLevel)
           }}
         />
       </div>
-
     </motion.div>
   )
 }

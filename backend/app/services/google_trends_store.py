@@ -1,132 +1,161 @@
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import and_
-from datetime import datetime, date
-from typing import List, Dict
-from app.utils.database import engine
+from sqlalchemy.orm import Session
+from app.utils.database import SessionLocal
 from app.models.google_trends import (
-    GoogleTrendsTimeseries,
     GoogleTrendsKeyword,
+    GoogleTrendsTimeseries,
 )
+from datetime import datetime, date
 
-Session = sessionmaker(bind=engine)
 
-
-# ==========================================================
-# STORE DATA (USED DURING CSV IMPORT OR LIVE FETCH)
-# ==========================================================
-def store_trends(keyword_id: int, country_id: int, df) -> None:
+# -------------------------------------------------
+# 🔥 STORE (MULTI-UPLOAD ENABLED)
+# -------------------------------------------------
+def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
     """
-    Store Google Trends dataframe into database.
-    Prevents duplicate entries by (keyword_id, country_id, date).
+    FINAL VERSION (MULTI-UPLOAD SUPPORT)
+
+    ✔ Always inserts new rows
+    ✔ Allows same keyword + date across uploads
+    ✔ Uses upload_id to differentiate datasets
+    ✔ No overwriting, no skipping
     """
 
-    db = Session()
+    db: Session = SessionLocal()
 
     try:
-        for _, row in df.iterrows():
+        keyword_text = keyword_text.lower().strip()
 
-            row_date = row["date"]
+        print(f"\n🔥 [STORE] Processing keyword: {keyword_text}")
 
-            # Ensure Python date type
-            if isinstance(row_date, str):
-                row_date = datetime.strptime(row_date, "%Y-%m-%d").date()
+        # -------------------------------------------------
+        # 🔍 Find keyword
+        # -------------------------------------------------
+        keyword = (
+            db.query(GoogleTrendsKeyword)
+            .filter(GoogleTrendsKeyword.keyword_text == keyword_text)
+            .first()
+        )
 
-            exists = (
-                db.query(GoogleTrendsTimeseries)
-                .filter(
-                    and_(
-                        GoogleTrendsTimeseries.keyword_id == keyword_id,
-                        GoogleTrendsTimeseries.country_id == country_id,
-                        GoogleTrendsTimeseries.date == row_date,
-                    )
+        if not keyword:
+            print(f"[WARNING] Keyword not found: {keyword_text}")
+            return 0
+
+        inserted_count = 0
+
+        for row in parsed_rows:
+            try:
+                if "date" not in row or "interest" not in row:
+                    continue
+
+                raw_date = row["date"]
+
+                # -------------------------------------------------
+                # ✅ SAFE DATE HANDLING
+                # -------------------------------------------------
+                if isinstance(raw_date, datetime):
+                    date_obj = raw_date.date()
+                elif isinstance(raw_date, date):
+                    date_obj = raw_date
+                elif isinstance(raw_date, str):
+                    date_obj = datetime.strptime(raw_date, "%Y-%m-%d").date()
+                else:
+                    raise ValueError(f"Invalid date type: {type(raw_date)}")
+
+                interest = int(row["interest"])
+
+                # -------------------------------------------------
+                # 🔥 ALWAYS INSERT (NO DUPLICATE CHECK)
+                # -------------------------------------------------
+                ts = GoogleTrendsTimeseries(
+                    keyword_id=keyword.id,
+                    country_id=country_id,
+                    date=date_obj,
+                    interest_index=interest,
+                    upload_id=upload_id,  # 🔥 KEY FIX
                 )
-                .first()
-            )
 
-            if exists:
+                db.add(ts)
+                inserted_count += 1
+
+            except Exception as row_error:
+                print(f"[ROW ERROR] {row_error}")
                 continue
-
-            record = GoogleTrendsTimeseries(
-                keyword_id=keyword_id,
-                country_id=country_id,
-                date=row_date,
-                interest_index=int(row["interest_index"]),
-                fetched_at=datetime.utcnow(),
-            )
-
-            db.add(record)
 
         db.commit()
 
+        print(f"[RESULT] {keyword_text}: inserted={inserted_count}")
+
+        return inserted_count
+
     except Exception as e:
         db.rollback()
-        print(f"Error storing trends: {e}")
-        raise
+        print(f"[ERROR] Failed storing data: {e}")
+        return 0
 
     finally:
         db.close()
 
 
-# ==========================================================
-# FETCH DATA (USED BY /signal ENDPOINT)
-# ==========================================================
-def fetch_google_trends(
-    disease_id: int,
-    country_id: int,
-    start_date: str = "",
-    end_date: str = "",
-) -> List[Dict]:
-    """
-    Fetch Google Trends data from database for analytics.
-    Returns list of {date, value}.
-    """
-
-    db = Session()
+# -------------------------------------------------
+# Fetch Google Trends data by keyword
+# -------------------------------------------------
+def fetch_google_trends_by_keyword(
+    keyword,
+    country_id,
+    start_date="",
+    end_date="",
+):
+    db: Session = SessionLocal()
 
     try:
-        # --------------------------------------------------
-        # FIX: Get all keyword IDs for this disease
-        # --------------------------------------------------
-        keyword_ids = [
-            k.id
-            for k in db.query(GoogleTrendsKeyword.id)
-            .filter(GoogleTrendsKeyword.disease_id == disease_id)
-            .all()
-        ]
+        keyword = keyword.lower().strip()
 
-        if not keyword_ids:
-            return []
-
-        # --------------------------------------------------
-        # Query timeseries using keyword_ids
-        # --------------------------------------------------
-        query = db.query(GoogleTrendsTimeseries).filter(
-            GoogleTrendsTimeseries.keyword_id.in_(keyword_ids),
-            GoogleTrendsTimeseries.country_id == country_id,
+        query = (
+            db.query(GoogleTrendsTimeseries, GoogleTrendsKeyword)
+            .join(
+                GoogleTrendsKeyword,
+                GoogleTrendsTimeseries.keyword_id == GoogleTrendsKeyword.id,
+            )
+            .filter(GoogleTrendsKeyword.keyword_text == keyword)
+            .filter(GoogleTrendsTimeseries.country_id == country_id)
         )
 
-        # Date filtering
         if start_date:
-            start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
-            query = query.filter(GoogleTrendsTimeseries.date >= start_date_obj)
+            query = query.filter(GoogleTrendsTimeseries.date >= start_date)
 
         if end_date:
-            end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
-            query = query.filter(GoogleTrendsTimeseries.date <= end_date_obj)
+            query = query.filter(GoogleTrendsTimeseries.date <= end_date)
 
-        results = query.order_by(GoogleTrendsTimeseries.date.asc()).all()
+        results = query.order_by(GoogleTrendsTimeseries.date).all()
 
         return [
             {
-                "date": r.date.isoformat(),
-                "value": r.interest_index,
+                "date": ts.date.strftime("%Y-%m-%d"),
+                "value": ts.interest_index,
+                "keyword": kw.keyword_text,
             }
-            for r in results
+            for ts, kw in results
         ]
 
-    except Exception as e:
-        print(f"Error fetching trends: {e}")
-        return []
+    finally:
+        db.close()
+
+
+# -------------------------------------------------
+# Fetch all keywords for a disease
+# -------------------------------------------------
+def fetch_keywords_for_disease(disease_id):
+    db: Session = SessionLocal()
+
+    try:
+        results = (
+            db.query(GoogleTrendsKeyword.keyword_text)
+            .filter(GoogleTrendsKeyword.disease_id == disease_id)
+            .filter(GoogleTrendsKeyword.active == True)
+            .all()
+        )
+
+        return [r[0].lower().strip() for r in results]
 
     finally:
         db.close()

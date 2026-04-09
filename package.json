@@ -1,5 +1,17 @@
 {
   "dependencies": {
-    "framer-motion": "^12.34.3"
+    "@tanstack/react-table": "^8.21.3",
+    "framer-motion": "^12.34.3",
+    "jspdf": "^4.2.1",
+    "leaflet": "^1.9.4",
+    "papaparse": "^5.5.3",
+    "plotly.js": "^3.4.0",
+    "react-calendar-heatmap": "^1.10.0",
+    "react-date-range": "^2.0.1",
+    "react-force-graph": "^1.48.2",
+    "react-leaflet": "^5.0.0",
+    "react-plotly.js": "^2.6.0",
+    "react-select": "^5.10.2",
+    "recharts": "^3.8.1"
   }
 }

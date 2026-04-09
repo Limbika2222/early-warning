@@ -1,43 +1,26 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { fetchUploadHistory } from "../api/trends"
+import { runAnalysis } from "../api/signal"
 import type { UploadHistoryItem } from "../api/trends"
 
-// 🔥 Codespaces backend URL
 const API_BASE = import.meta.env.VITE_API_BASE
-
-// ---------------------------
-// Static reference data
-// ---------------------------
-type DiseaseOption = {
-  label: string
-  keyword: string
-  diseaseId: number
-}
 
 type CountryOption = {
   label: string
-  iso2: string
+  id: number
 }
 
-const diseases: DiseaseOption[] = [
-  { label: "Influenza", keyword: "fever cough", diseaseId: 1 },
-  { label: "Malaria", keyword: "malaria", diseaseId: 2 },
-  { label: "Cholera", keyword: "cholera", diseaseId: 3 },
-  { label: "Zika", keyword: "zika", diseaseId: 4 },
-]
-
 const countries: CountryOption[] = [
-  { label: "India", iso2: "IN" },
-  { label: "Malawi", iso2: "MW" },
-  { label: "Philippines", iso2: "PH" },
+  { label: "India", id: 1 },
+  { label: "Malawi", id: 2 },
+  { label: "Philippines", id: 3 },
 ]
 
 export default function UploadData() {
   const navigate = useNavigate()
 
-  const [keyword, setKeyword] = useState("")
-  const [country, setCountry] = useState("")
+  const [countryId, setCountryId] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -46,7 +29,7 @@ export default function UploadData() {
   const [loadingTable, setLoadingTable] = useState(false)
 
   // ---------------------------
-  // Fetch upload history
+  // Load upload history
   // ---------------------------
   const loadUploads = useCallback(async () => {
     setLoadingTable(true)
@@ -66,13 +49,18 @@ export default function UploadData() {
   }, [loadUploads])
 
   // ---------------------------
-  // Upload CSV handler
+  // Submit handler (FIXED)
   // ---------------------------
-  const handleSubmit = async () => {
-    if (!file || !keyword || !country) {
-      setStatus("Please select disease, country, and CSV file.")
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault() // 🔥 VERY IMPORTANT
+
+    if (!file || !countryId) {
+      setStatus("❌ Please select a country and CSV file.")
       return
     }
+
+    console.log("Uploading file:", file)
+    console.log("Country ID:", countryId)
 
     setUploading(true)
     setStatus(null)
@@ -80,121 +68,105 @@ export default function UploadData() {
     try {
       const formData = new FormData()
       formData.append("file", file)
-      formData.append("disease_keyword", keyword)
-      formData.append("country_iso2", country)
+      formData.append("country_id", String(countryId))
 
       const response = await fetch(`${API_BASE}/api/trends/upload-csv`, {
         method: "POST",
         body: formData,
       })
 
-      const contentType = response.headers.get("content-type")
+      console.log("Response status:", response.status)
 
       if (!response.ok) {
-        if (contentType?.includes("application/json")) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || "Upload failed")
-        } else {
-          const text = await response.text()
-          throw new Error(text || "Upload failed")
-        }
+        const text = await response.text()
+        console.error("Upload failed:", text)
+        throw new Error(text || "Upload failed")
       }
 
       const data = await response.json()
+      console.log("Upload success:", data)
+
+      // 🔥 run backend analysis
+      await runAnalysis()
 
       setStatus(
-        `✅ Uploaded ${data.rows_inserted} rows (${data.date_range.start} → ${data.date_range.end})`
+        `✅ Uploaded ${data.rows_processed} rows (${data.keywords_processed} keywords)`
       )
 
+      // reset
       setFile(null)
-      setKeyword("")
-      setCountry("")
+      setCountryId(null)
+
       await loadUploads()
+
+      // 🔥 force dashboard refresh
+      navigate(`/dashboard?refresh=${Date.now()}`)
 
     } catch (err) {
       console.error("Upload error:", err)
       setStatus(
-        err instanceof Error
-          ? `❌ ${err.message}`
-          : "❌ Upload failed"
+        err instanceof Error ? `❌ ${err.message}` : "❌ Upload failed"
       )
     } finally {
       setUploading(false)
     }
   }
 
-  const getDiseaseIdFromKeyword = (kw: string) =>
-    diseases.find(d => d.keyword === kw)?.diseaseId
-
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-12">
-      
+
       {/* ---------------- Upload Form ---------------- */}
-      <div>
+      <form onSubmit={handleSubmit}>
         <h1 className="text-2xl font-semibold mb-6">
           Upload Google Trends Data
         </h1>
 
         <div className="bg-white p-6 rounded shadow space-y-5">
 
-          <select
-            id="disease"
-            name="disease"
-            className="w-full border rounded px-3 py-2"
-            value={keyword}
-            onChange={e => setKeyword(e.target.value)}
-          >
-            <option value="">Select disease</option>
-            {diseases.map(d => (
-              <option key={d.keyword} value={d.keyword}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-
+          {/* COUNTRY */}
           <select
             id="country"
             name="country"
             className="w-full border rounded px-3 py-2"
-            value={country}
-            onChange={e => setCountry(e.target.value)}
+            value={countryId ?? ""}
+            onChange={(e) => setCountryId(Number(e.target.value))}
           >
             <option value="">Select country</option>
-            {countries.map(c => (
-              <option key={c.iso2} value={c.iso2}>
+            {countries.map((c) => (
+              <option key={c.id} value={c.id}>
                 {c.label}
               </option>
             ))}
           </select>
 
+          {/* FILE INPUT */}
           <input
-            id="csvFile"
-            name="csvFile"
+            id="file"
+            name="file"
             type="file"
             accept=".csv"
-            onChange={e => setFile(e.target.files?.[0] ?? null)}
+            className="w-full"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
 
+          {/* BUTTON */}
           <button
-            onClick={handleSubmit}
+            type="submit"
             disabled={uploading}
-            className="bg-blue-600 text-white px-6 py-2 rounded disabled:opacity-60"
+            className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-60"
           >
-            {uploading ? "Uploading…" : "Upload CSV"}
+            {uploading ? "Uploading…" : "Upload & Analyze"}
           </button>
 
-          {status && (
-            <p className="text-sm mt-2">
-              {status}
-            </p>
-          )}
+          {/* STATUS */}
+          {status && <p className="text-sm">{status}</p>}
         </div>
-      </div>
+      </form>
 
       {/* ---------------- Upload History ---------------- */}
       <div>
         <h2 className="text-xl font-semibold mb-4">
-          Upload History (click row to open dashboard)
+          Upload History
         </h2>
 
         {loadingTable ? (
@@ -208,36 +180,28 @@ export default function UploadData() {
                 <th className="p-2 border">Keyword</th>
                 <th className="p-2 border">Country</th>
                 <th className="p-2 border">Rows</th>
-                <th className="p-2 border">Uploaded at</th>
+                <th className="p-2 border">Uploaded</th>
               </tr>
             </thead>
             <tbody>
-              {uploads.map(u => {
-                const diseaseId = getDiseaseIdFromKeyword(u.keyword)
-
-                return (
-                  <tr
-                    key={u.id}
-                    className="cursor-pointer hover:bg-blue-50"
-                    onClick={() => {
-                      if (diseaseId) {
-                        navigate(
-                          `/dashboard?diseaseId=${diseaseId}&country=${u.country}`
-                        )
-                      }
-                    }}
-                  >
-                    <td className="p-2 border">{u.keyword}</td>
-                    <td className="p-2 border">{u.country}</td>
-                    <td className="p-2 border text-center">
-                      {u.rows_inserted}
-                    </td>
-                    <td className="p-2 border">
-                      {new Date(u.uploaded_at).toLocaleString()}
-                    </td>
-                  </tr>
-                )
-              })}
+              {uploads.map((u) => (
+                <tr
+                  key={u.id}
+                  className="cursor-pointer hover:bg-indigo-50"
+                  onClick={() =>
+                    navigate(`/dashboard?refresh=${Date.now()}`)
+                  }
+                >
+                  <td className="p-2 border">{u.keyword}</td>
+                  <td className="p-2 border">{u.country}</td>
+                  <td className="p-2 border text-center">
+                    {u.rows_inserted}
+                  </td>
+                  <td className="p-2 border">
+                    {new Date(u.uploaded_at).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
