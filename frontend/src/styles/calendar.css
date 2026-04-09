@@ -1,0 +1,41 @@
+/* Container */
+.react-calendar {
+    border: none;
+    width: 100%;
+    font-family: inherit;
+  }
+  
+  /* Navigation */
+  .react-calendar__navigation button {
+    color: #374151;
+    font-weight: 500;
+  }
+  
+  /* Days */
+  .react-calendar__tile {
+    border-radius: 10px;
+    padding: 10px 0;
+  }
+  
+  /* Hover */
+  .react-calendar__tile:hover {
+    background: #EEF2FF;
+  }
+  
+  /* Selected range */
+  .react-calendar__tile--active {
+    background: #6366F1;
+    color: white;
+  }
+  
+  /* Range highlight */
+  .react-calendar__tile--range {
+    background: #C7D2FE;
+  }
+  
+  /* 🔥 SPIKE DAYS */
+  .spike-day {
+    background: #FEE2E2 !important;
+    color: #EF4444 !important;
+    font-weight: 600;
+  }

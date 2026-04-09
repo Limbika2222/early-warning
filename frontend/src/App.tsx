@@ -4,11 +4,12 @@ import { onAuthStateChanged } from "firebase/auth"
 import type { User } from "firebase/auth"
 
 import { auth } from "./firebase"
+import { DashboardProvider } from "./context/DashboardContext"
 
 import AppLayout from "./components/layout/AppLayout"
 import Login from "./pages/Login"
-import Dashboard from "./pages/Dashboard"
 import UploadData from "./pages/UploadData"
+import NewDashboard from "./pages/NewDashboard"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -51,7 +52,14 @@ export default function App() {
         <Route
           element={user ? <AppLayout /> : <Navigate to="/login" />}
         >
-          <Route path="/" element={<Dashboard />} />
+          <Route
+            path="/"
+            element={
+              <DashboardProvider>
+                <NewDashboard />
+              </DashboardProvider>
+            }
+          />
           <Route path="/upload" element={<UploadData />} />
         </Route>
 
