@@ -10,6 +10,7 @@ import AppLayout from "./components/layout/AppLayout"
 import Login from "./pages/Login"
 import UploadData from "./pages/UploadData"
 import NewDashboard from "./pages/NewDashboard"
+import WhoDashboard from "./pages/WhoDashboard" // ✅ ADDED
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -52,6 +53,7 @@ export default function App() {
         <Route
           element={user ? <AppLayout /> : <Navigate to="/login" />}
         >
+          {/* Google Dashboard */}
           <Route
             path="/"
             element={
@@ -60,6 +62,18 @@ export default function App() {
               </DashboardProvider>
             }
           />
+
+          {/* ✅ WHO DASHBOARD (ADDED) */}
+          <Route
+            path="/who-dashboard"
+            element={
+              <DashboardProvider>
+                <WhoDashboard />
+              </DashboardProvider>
+            }
+          />
+
+          {/* Upload */}
           <Route path="/upload" element={<UploadData />} />
         </Route>
 

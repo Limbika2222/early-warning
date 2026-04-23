@@ -14,7 +14,7 @@ from app.models.google_trends import (
 
 router = APIRouter(prefix="/api/trends", tags=["trends"])
 
-print("✅ trends.py loaded (NO upload endpoint here)")
+print("✅ trends.py loaded (UPLOAD HISTORY FIXED)")
 
 
 # --------------------
@@ -28,40 +28,37 @@ def get_db():
         db.close()
 
 
-# ---------------------------------
-# GET: Upload history
-# ---------------------------------
+# =====================================================
+# 📊 GET: Upload history (🔥 FIXED)
+# =====================================================
 @router.get("/uploads")
 def list_upload_history(db: Session = Depends(get_db)):
+    """
+    Returns upload history from GoogleTrendsUpload table
+    """
+
     uploads = (
-        db.query(
-            GoogleTrendsUpload.id,
-            GoogleTrendsKeyword.keyword_text,
-            Country.name.label("country"),
-            GoogleTrendsUpload.rows_inserted,
-            GoogleTrendsUpload.uploaded_at,
-        )
-        .join(GoogleTrendsKeyword)
-        .join(Country)
+        db.query(GoogleTrendsUpload, Country)
+        .join(Country, GoogleTrendsUpload.country_id == Country.id)
         .order_by(GoogleTrendsUpload.uploaded_at.desc())
         .all()
     )
 
     return [
         {
-            "id": u.id,
-            "keyword": u.keyword_text,
-            "country": u.country,
-            "rows_inserted": u.rows_inserted,
-            "uploaded_at": u.uploaded_at.isoformat(),
+            "id": u.GoogleTrendsUpload.id,
+            "keyword": u.GoogleTrendsUpload.keywords,  # 🔥 FIX
+            "country": u.Country.name,
+            "rows_inserted": u.GoogleTrendsUpload.rows_inserted,
+            "uploaded_at": u.GoogleTrendsUpload.uploaded_at.isoformat(),
         }
         for u in uploads
     ]
 
 
-# ---------------------------------
-# GET: Aggregated disease signal
-# ---------------------------------
+# =====================================================
+# 📈 GET: Aggregated disease signal
+# =====================================================
 @router.get("/aggregate")
 def aggregate_disease_signal(
     disease_id: int,

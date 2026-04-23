@@ -3,22 +3,67 @@ from app.utils.database import SessionLocal
 from app.models.google_trends import (
     GoogleTrendsKeyword,
     GoogleTrendsTimeseries,
+    Disease,
 )
 from datetime import datetime, date
 
 
 # -------------------------------------------------
-# 🔥 STORE (MULTI-UPLOAD ENABLED)
+# 🔥 DISEASE INFERENCE (CRITICAL FIX)
+# -------------------------------------------------
+def infer_disease(keyword: str, db: Session):
+    keyword = keyword.lower().strip()
+
+    mapping = {
+        "COVID-19": [
+            "fever", "cough", "fatigue", "loss of smell", "shortness of breath"
+        ],
+        "Influenza": [
+            "fever", "cough", "chills", "sore throat"
+        ],
+        "Dengue": [
+            "fever", "rash", "joint pain"
+        ],
+        "Malaria": [
+            "fever", "chills", "sweating"
+        ],
+        "Typhoid": [
+            "fever", "abdominal pain", "weakness"
+        ],
+        "Pneumonia": [
+            "cough", "shortness of breath"
+        ],
+        "Food Poisoning": [
+            "vomiting", "diarrhea"
+        ],
+        "Tuberculosis": [
+            "cough", "weight loss"
+        ],
+        "Asthma": [
+            "shortness of breath", "wheezing"
+        ],
+        "Migraine": [
+            "headache", "nausea"
+        ],
+    }
+
+    for disease_name, symptoms in mapping.items():
+        if keyword in symptoms:
+            disease = (
+                db.query(Disease)
+                .filter(Disease.name == disease_name)
+                .first()
+            )
+            if disease:
+                return disease.id
+
+    return None
+
+
+# -------------------------------------------------
+# 🔥 STORE FUNCTION (FIXED)
 # -------------------------------------------------
 def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
-    """
-    FINAL VERSION (MULTI-UPLOAD SUPPORT)
-
-    ✔ Always inserts new rows
-    ✔ Allows same keyword + date across uploads
-    ✔ Uses upload_id to differentiate datasets
-    ✔ No overwriting, no skipping
-    """
 
     db: Session = SessionLocal()
 
@@ -28,7 +73,7 @@ def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
         print(f"\n🔥 [STORE] Processing keyword: {keyword_text}")
 
         # -------------------------------------------------
-        # 🔍 Find keyword
+        # 🔍 Find OR CREATE keyword
         # -------------------------------------------------
         keyword = (
             db.query(GoogleTrendsKeyword)
@@ -37,11 +82,26 @@ def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
         )
 
         if not keyword:
-            print(f"[WARNING] Keyword not found: {keyword_text}")
-            return 0
+            print(f"⚠️ Creating new keyword: {keyword_text}")
+
+            # 🔥 assign disease_id here
+            disease_id = infer_disease(keyword_text, db)
+
+            keyword = GoogleTrendsKeyword(
+                keyword_text=keyword_text,
+                disease_id=disease_id,   # ✅ FIX
+                active=True,
+            )
+
+            db.add(keyword)
+            db.commit()
+            db.refresh(keyword)
 
         inserted_count = 0
 
+        # -------------------------------------------------
+        # 🔥 Insert rows
+        # -------------------------------------------------
         for row in parsed_rows:
             try:
                 if "date" not in row or "interest" not in row:
@@ -49,9 +109,6 @@ def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
 
                 raw_date = row["date"]
 
-                # -------------------------------------------------
-                # ✅ SAFE DATE HANDLING
-                # -------------------------------------------------
                 if isinstance(raw_date, datetime):
                     date_obj = raw_date.date()
                 elif isinstance(raw_date, date):
@@ -63,15 +120,12 @@ def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
 
                 interest = int(row["interest"])
 
-                # -------------------------------------------------
-                # 🔥 ALWAYS INSERT (NO DUPLICATE CHECK)
-                # -------------------------------------------------
                 ts = GoogleTrendsTimeseries(
                     keyword_id=keyword.id,
                     country_id=country_id,
                     date=date_obj,
                     interest_index=interest,
-                    upload_id=upload_id,  # 🔥 KEY FIX
+                    upload_id=upload_id,
                 )
 
                 db.add(ts)
@@ -83,13 +137,13 @@ def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
 
         db.commit()
 
-        print(f"[RESULT] {keyword_text}: inserted={inserted_count}")
+        print(f"✅ [RESULT] {keyword_text}: inserted={inserted_count}")
 
         return inserted_count
 
     except Exception as e:
         db.rollback()
-        print(f"[ERROR] Failed storing data: {e}")
+        print(f"❌ [ERROR] Failed storing data: {e}")
         return 0
 
     finally:
@@ -97,7 +151,7 @@ def store_google_trends_data(parsed_rows, keyword_text, country_id, upload_id):
 
 
 # -------------------------------------------------
-# Fetch Google Trends data by keyword
+# 📊 FETCH DATA BY KEYWORD
 # -------------------------------------------------
 def fetch_google_trends_by_keyword(
     keyword,
@@ -142,7 +196,7 @@ def fetch_google_trends_by_keyword(
 
 
 # -------------------------------------------------
-# Fetch all keywords for a disease
+# 📌 FETCH KEYWORDS FOR DISEASE
 # -------------------------------------------------
 def fetch_keywords_for_disease(disease_id):
     db: Session = SessionLocal()

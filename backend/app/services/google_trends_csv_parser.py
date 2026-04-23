@@ -4,7 +4,7 @@ import re
 
 
 # -------------------------------------------------
-# 🔥 Clean keyword (SAFE)
+# 🔥 Clean keyword (FIXED)
 # -------------------------------------------------
 def clean_keyword(keyword: str) -> str:
     if not keyword:
@@ -12,17 +12,36 @@ def clean_keyword(keyword: str) -> str:
 
     keyword = str(keyword).strip()
 
-    # remove ": something"
-    keyword = re.sub(r":.*", "", keyword)
+    # -------------------------------------------------
+    # 🔥 REMOVE GOOGLE DUPLICATES (.1, .2, etc)
+    # -------------------------------------------------
+    keyword = re.sub(r"\.\d+$", "", keyword)
 
-    # remove "(something)"
-    keyword = re.sub(r"\(.*?\)", "", keyword)
+    # -------------------------------------------------
+    # REMOVE EXTRA TEXT
+    # -------------------------------------------------
+    keyword = re.sub(r":.*", "", keyword)          # remove ": something"
+    keyword = re.sub(r"\(.*?\)", "", keyword)      # remove "(...)"
+
+    # -------------------------------------------------
+    # NORMALIZATION (CRITICAL)
+    # -------------------------------------------------
+    keyword = keyword.lower()
+
+    keyword = keyword.replace("symptoms of", "")
+    keyword = keyword.replace("symptom of", "")
+    keyword = keyword.replace("covid-19", "covid")
+    keyword = keyword.replace("influenza-like illness", "flu")
+
+    # clean separators
+    keyword = keyword.replace("-", " ")
+    keyword = keyword.replace("_", " ")
 
     # remove % and normalize spaces
     keyword = keyword.replace("%", "")
     keyword = re.sub(r"\s+", " ", keyword)
 
-    return keyword.lower().strip()
+    return keyword.strip()
 
 
 # -------------------------------------------------
@@ -44,10 +63,10 @@ def parse_value(value):
 
 
 # -------------------------------------------------
-# 🔥 FINAL UNIVERSAL PARSER
+# 🔥 FINAL UNIVERSAL PARSER (DEDUP FIXED)
 # -------------------------------------------------
 def parse_google_trends_csv(file_bytes: bytes):
-    print("🔥 PARSER RUNNING (UNIVERSAL VERSION)")
+    print("🔥 PARSER RUNNING (FIXED VERSION)")
 
     try:
         text = file_bytes.decode("utf-8-sig", errors="ignore")
@@ -57,28 +76,18 @@ def parse_google_trends_csv(file_bytes: bytes):
             raise ValueError("Empty CSV file")
 
         # -------------------------------------------------
-        # 🔥 STEP 1: Find header row (VERY ROBUST)
+        # STEP 1: Detect header
         # -------------------------------------------------
         header_index = None
         delimiter = ","
 
         for i, line in enumerate(lines):
-            # detect delimiter
-            if ";" in line:
-                delimiter = ";"
-            else:
-                delimiter = ","
-
+            delimiter = ";" if ";" in line else ","
             cols = [c.strip() for c in line.split(delimiter)]
 
-            # must have at least 2+ columns
             if len(cols) < 2:
                 continue
 
-            # first column should be date-like OR text
-            first = cols[0].lower()
-
-            # second column must NOT be numeric (prevents picking data row)
             second = cols[1]
 
             if not second.replace(".", "").isdigit():
@@ -101,14 +110,13 @@ def parse_google_trends_csv(file_bytes: bytes):
             engine="python"
         )
 
-        # drop empty columns
         df = df.dropna(axis=1, how="all")
 
         if df.shape[1] < 2:
             raise ValueError("No keyword columns found")
 
         # -------------------------------------------------
-        # STEP 3: Rename first column → date
+        # STEP 3: DATE
         # -------------------------------------------------
         df.rename(columns={df.columns[0]: "date"}, inplace=True)
 
@@ -116,18 +124,25 @@ def parse_google_trends_csv(file_bytes: bytes):
         df = df.dropna(subset=["date"])
 
         # -------------------------------------------------
-        # STEP 4: Clean column names safely
+        # STEP 4: CLEAN + DEDUP COLUMNS
         # -------------------------------------------------
         column_map = {}
         valid_columns = []
+        seen_keywords = set()
 
         for col in df.columns[1:]:
             cleaned = clean_keyword(col)
 
-            # skip invalid columns
             if not cleaned or cleaned.replace(".", "").isdigit():
                 print(f"[WARNING] Skipping column: {col}")
                 continue
+
+            # 🔥 DEDUPLICATION (KEY FIX)
+            if cleaned in seen_keywords:
+                print(f"[INFO] Duplicate removed: {col} → {cleaned}")
+                continue
+
+            seen_keywords.add(cleaned)
 
             column_map[col] = cleaned
             valid_columns.append(col)
@@ -138,7 +153,7 @@ def parse_google_trends_csv(file_bytes: bytes):
             raise ValueError("No valid keyword columns")
 
         # -------------------------------------------------
-        # STEP 5: Convert to LONG format
+        # STEP 5: LONG FORMAT
         # -------------------------------------------------
         data = []
 
@@ -158,9 +173,6 @@ def parse_google_trends_csv(file_bytes: bytes):
         if not data:
             raise ValueError("No valid rows extracted")
 
-        # -------------------------------------------------
-        # DEBUG OUTPUT
-        # -------------------------------------------------
         print(f"[PARSER] Rows extracted: {len(data)}")
         print(f"[PARSER SAMPLE]: {data[:5]}")
 

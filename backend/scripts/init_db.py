@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.utils.database import engine, Base
 
 # -------------------------------------------------
-# Import ALL models so SQLAlchemy can create tables
+# Import ALL existing models (IMPORTANT)
 # -------------------------------------------------
 from app.models.google_trends import (
     Disease,
@@ -20,20 +20,15 @@ from app.models.google_trends import (
 )
 
 from app.models.symptom_trends import SymptomTrend
-from app.models.disease_risk import DiseaseRisk
 from app.models.alerts import Alert
-
-# Later when added:
-# from app.models.wikipedia_data import WikipediaData
-
 
 # -------------------------------------------------
 # Initialize Database
 # -------------------------------------------------
 def init_db():
-    print("Creating database tables...")
+    print("🚀 Creating database tables...")
     Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully.")
+    print("✅ Database tables created successfully.")
 
 
 # -------------------------------------------------

@@ -2,35 +2,29 @@ from typing import Dict, List
 
 
 # ==========================================================
-# Disease → Symptoms Mapping
+# Disease → Symptoms Mapping (REALISTIC + CLEAN)
 # ==========================================================
 DISEASE_SYMPTOMS = {
-    "malaria": ["fever", "chills", "headache", "vomiting", "fatigue"],
-    "dengue": ["fever", "headache", "rash", "joint pain", "muscle pain"],
+    "malaria": ["fever", "chills", "headache", "fatigue"],
+    "dengue": ["fever", "headache", "rash", "joint pain"],
     "cholera": ["diarrhea", "vomiting", "dehydration"],
-    "flu": ["fever", "cough", "sore throat", "fatigue", "headache"],
-    "covid": ["fever", "cough", "shortness of breath", "fatigue", "loss of smell"],
+    "flu": ["fever", "cough", "sore throat", "fatigue"],
+    "covid": ["fever", "cough", "fatigue", "shortness of breath", "loss of smell"],
     "tuberculosis": ["cough", "fever", "night sweats", "weight loss"],
     "pneumonia": ["cough", "fever", "shortness of breath", "chest pain"],
-    "measles": ["fever", "rash", "cough", "runny nose"],
     "typhoid": ["fever", "headache", "abdominal pain", "weakness"],
-    "hepatitis": ["fatigue", "nausea", "abdominal pain", "jaundice"],
-    "food poisoning": ["vomiting", "diarrhea", "abdominal pain", "fever"],
-    "meningitis": ["fever", "headache", "stiff neck", "nausea"],
-    "ebola": ["fever", "vomiting", "diarrhea", "bleeding"],
-    "zika": ["fever", "rash", "joint pain", "red eyes"],
-    "chikungunya": ["fever", "joint pain", "muscle pain", "rash"]
 }
 
 
 # ==========================================================
-# 🔥 UNIQUE (SIGNATURE) SYMPTOMS
+# 🔥 SIGNATURE SYMPTOMS (HIGH CONFIDENCE SIGNALS)
 # ==========================================================
 SIGNATURE_SYMPTOMS = {
     "covid": ["loss of smell", "shortness of breath"],
     "flu": ["sore throat"],
-    "cholera": ["dehydration"],
     "malaria": ["chills"],
+    "dengue": ["joint pain"],
+    "cholera": ["dehydration"],
 }
 
 
@@ -38,56 +32,94 @@ SIGNATURE_SYMPTOMS = {
 # WEIGHTS
 # ==========================================================
 SHARED_WEIGHT = 1.0
-SIGNATURE_WEIGHT = 3.0   # 🔥 KEY DIFFERENCE
+SIGNATURE_WEIGHT = 3.0
 
 
 # ==========================================================
-# Infer Disease Scores (IMPROVED)
+# NORMALIZATION (VERY IMPORTANT)
+# ==========================================================
+def normalize_symptom(symptom: str) -> str:
+    return symptom.strip().lower()
+
+
+# ==========================================================
+# 🔥 CORE FUNCTION
 # ==========================================================
 def infer_disease_scores(symptom_growth: Dict[str, float]) -> List[Dict]:
+    """
+    Input:
+        {
+            "fever": 12.3,
+            "cough": 5.2,
+            ...
+        }
+
+    Output:
+        ranked diseases with scores + risk levels
+    """
+
+    # Normalize input keys
+    normalized_growth = {
+        normalize_symptom(k): v for k, v in symptom_growth.items()
+    }
 
     disease_scores = []
 
     for disease, symptoms in DISEASE_SYMPTOMS.items():
-        total = 0
+        total = 0.0
         count = 0
-        signature_boost = 0
+        signature_boost = 0.0
 
+        # ---------------------------
+        # BASE SYMPTOM SCORING
+        # ---------------------------
         for symptom in symptoms:
-            if symptom in symptom_growth:
-                growth = symptom_growth[symptom]
+            symptom = normalize_symptom(symptom)
 
+            if symptom in normalized_growth:
+                growth = normalized_growth[symptom]
+
+                # Only consider positive trend
                 if growth > 0:
                     total += growth * SHARED_WEIGHT
                     count += 1
 
-        # 🔥 Check signature symptoms
-        signature_list = SIGNATURE_SYMPTOMS.get(disease, [])
+        base_score = (total / count) if count > 0 else 0.0
 
-        for sig in signature_list:
-            if sig in symptom_growth and symptom_growth[sig] > 0:
-                signature_boost += symptom_growth[sig] * SIGNATURE_WEIGHT
+        # ---------------------------
+        # SIGNATURE BOOST
+        # ---------------------------
+        for sig in SIGNATURE_SYMPTOMS.get(disease, []):
+            sig = normalize_symptom(sig)
 
-        # Base score
-        base_score = (total / count) if count > 0 else 0
+            if sig in normalized_growth:
+                growth = normalized_growth[sig]
+                if growth > 0:
+                    signature_boost += growth * SIGNATURE_WEIGHT
 
-        # 🔥 FINAL SCORE
+        # ---------------------------
+        # FINAL SCORE
+        # ---------------------------
         score = base_score + signature_boost
 
-        # 🔥 CRITICAL RULE (ANTI-FALSE COVID)
+        # ---------------------------
+        # 🔥 ANTI-FALSE COVID LOGIC
+        # ---------------------------
         if disease == "covid":
             has_signature = any(
-                s in symptom_growth and symptom_growth[s] > 0
+                normalize_symptom(s) in normalized_growth and normalized_growth[normalize_symptom(s)] > 0
                 for s in SIGNATURE_SYMPTOMS["covid"]
             )
 
             if not has_signature:
-                score *= 0.4  # 🔥 heavily downgrade COVID
+                score *= 0.3  # stronger downgrade
 
-        # Determine risk level
-        if score >= 20:
+        # ---------------------------
+        # RISK LEVEL (IMPROVED)
+        # ---------------------------
+        if score >= 15:
             risk_level = "HIGH"
-        elif score >= 8:
+        elif score >= 6:
             risk_level = "MEDIUM"
         elif score > 0:
             risk_level = "LOW"
@@ -95,9 +127,10 @@ def infer_disease_scores(symptom_growth: Dict[str, float]) -> List[Dict]:
             risk_level = "NONE"
 
         disease_scores.append({
-            "disease": disease,
+            "disease": disease.title(),
             "score": round(score, 2),
-            "risk_level": risk_level
+            "risk_level": risk_level,
         })
 
+    # Sort descending
     return sorted(disease_scores, key=lambda x: x["score"], reverse=True)

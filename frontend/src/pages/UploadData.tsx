@@ -1,3 +1,5 @@
+"use client"
+
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { fetchUploadHistory } from "../api/trends"
@@ -28,16 +30,22 @@ export default function UploadData() {
   const [uploads, setUploads] = useState<UploadHistoryItem[]>([])
   const [loadingTable, setLoadingTable] = useState(false)
 
-  // ---------------------------
-  // Load upload history
-  // ---------------------------
+  // -------------------------------------------------
+  // 🔥 LOAD UPLOAD HISTORY (FIXED)
+  // -------------------------------------------------
   const loadUploads = useCallback(async () => {
     setLoadingTable(true)
+
     try {
       const data = await fetchUploadHistory()
-      setUploads(data)
+
+      console.log("🔥 UPLOADS FROM API:", data)
+
+      setUploads(data || [])   // ✅ SAFE SET
+
     } catch (err) {
-      console.error("Upload history error:", err)
+      console.error("❌ Upload history error:", err)
+      setUploads([])           // ✅ prevent crash
       setStatus("❌ Failed to fetch upload history")
     } finally {
       setLoadingTable(false)
@@ -48,19 +56,16 @@ export default function UploadData() {
     loadUploads()
   }, [loadUploads])
 
-  // ---------------------------
-  // Submit handler (FIXED)
-  // ---------------------------
+  // -------------------------------------------------
+  // 🔥 UPLOAD HANDLER (FIXED)
+  // -------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault() // 🔥 VERY IMPORTANT
+    e.preventDefault()
 
     if (!file || !countryId) {
       setStatus("❌ Please select a country and CSV file.")
       return
     }
-
-    console.log("Uploading file:", file)
-    console.log("Country ID:", countryId)
 
     setUploading(true)
     setStatus(null)
@@ -70,40 +75,43 @@ export default function UploadData() {
       formData.append("file", file)
       formData.append("country_id", String(countryId))
 
-      const response = await fetch(`${API_BASE}/api/trends/upload-csv`, {
-        method: "POST",
-        body: formData,
-      })
-
-      console.log("Response status:", response.status)
+      const response = await fetch(
+        `${API_BASE}/api/trends/upload-csv`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      )
 
       if (!response.ok) {
         const text = await response.text()
-        console.error("Upload failed:", text)
         throw new Error(text || "Upload failed")
       }
 
       const data = await response.json()
-      console.log("Upload success:", data)
 
-      // 🔥 run backend analysis
-      await runAnalysis()
+      console.log("✅ Upload success:", data)
 
+      // 🔥 FIXED (correct field name)
       setStatus(
-        `✅ Uploaded ${data.rows_processed} rows (${data.keywords_processed} keywords)`
+        `✅ Uploaded ${data.rows_inserted} rows (${data.keywords_processed} keywords)`
       )
 
-      // reset
+      // 🔥 RUN ANALYSIS
+      await runAnalysis()
+
+      // reset form
       setFile(null)
       setCountryId(null)
 
+      // 🔥 RELOAD TABLE
       await loadUploads()
 
-      // 🔥 force dashboard refresh
+      // 🔥 refresh dashboard
       navigate(`/dashboard?refresh=${Date.now()}`)
 
     } catch (err) {
-      console.error("Upload error:", err)
+      console.error("❌ Upload error:", err)
       setStatus(
         err instanceof Error ? `❌ ${err.message}` : "❌ Upload failed"
       )
@@ -125,8 +133,6 @@ export default function UploadData() {
 
           {/* COUNTRY */}
           <select
-            id="country"
-            name="country"
             className="w-full border rounded px-3 py-2"
             value={countryId ?? ""}
             onChange={(e) => setCountryId(Number(e.target.value))}
@@ -139,10 +145,8 @@ export default function UploadData() {
             ))}
           </select>
 
-          {/* FILE INPUT */}
+          {/* FILE */}
           <input
-            id="file"
-            name="file"
             type="file"
             accept=".csv"
             className="w-full"
@@ -177,7 +181,7 @@ export default function UploadData() {
           <table className="w-full border">
             <thead className="bg-gray-100">
               <tr>
-                <th className="p-2 border">Keyword</th>
+                <th className="p-2 border">Keywords</th>
                 <th className="p-2 border">Country</th>
                 <th className="p-2 border">Rows</th>
                 <th className="p-2 border">Uploaded</th>
@@ -206,6 +210,7 @@ export default function UploadData() {
           </table>
         )}
       </div>
+
     </div>
   )
 }

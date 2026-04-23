@@ -2,207 +2,261 @@ from sqlalchemy.orm import Session
 from datetime import date, datetime, timedelta
 import pandas as pd
 
-# ✅ CORRECT MODELS (FIXED)
 from app.models.google_trends import (
-    GoogleTrendsTimeseries,   # ✅ FIXED NAME
+    GoogleTrendsTimeseries,
     GoogleTrendsKeyword,
     DiseaseRisk,
-    Disease,
 )
 
+# -------------------------------------------------
+# DISEASE → SYMPTOMS + WEIGHTS
+# -------------------------------------------------
+DISEASE_SYMPTOMS = {
+    "Influenza": {
+        "fever": 0.8,
+        "cough": 1.2,
+        "chills": 1.8,
+        "sore throat": 1.3,
+    },
+    "Dengue": {
+        "fever": 1.2,
+        "rash": 2.0,
+        "joint pain": 1.8,
+    },
+    "Malaria": {
+        "fever": 1.5,
+        "chills": 2.0,
+        "fatigue": 1.0,
+    },
+    "Typhoid": {
+        "fever": 1.2,
+        "abdominal pain": 1.8,
+    },
+    "Pneumonia": {
+        "cough": 1.2,
+        "shortness of breath": 2.0,
+    },
+    "Tuberculosis": {
+        "cough": 1.2,
+        "weight loss": 2.0,
+    },
+    "Common Cold": {
+        "runny nose": 1.5,
+        "sore throat": 1.2,
+    },
+    "Migraine": {
+        "headache": 2.5,
+    },
+}
 
 # -------------------------------------------------
-# 🔥 MAIN ANALYSIS FUNCTION
+# KEYWORD → DISEASE MATCH
 # -------------------------------------------------
-def compute_disease_risk(db: Session, window_days: int = 7):
+def map_keyword(keyword: str):
+    keyword = keyword.lower()
+    matches = []
+
+    for disease, symptoms in DISEASE_SYMPTOMS.items():
+        for symptom, weight in symptoms.items():
+            if symptom in keyword:
+                matches.append((disease, weight))
+                break
+
+    return matches
+
+
+# -------------------------------------------------
+# 🔥 MAIN FUNCTION (FIXED)
+# -------------------------------------------------
+def compute_disease_risk(
+    db: Session,
+    end_date: date | None = None,
+    window_days: int = 7
+):
     print("🚀 Starting disease risk computation...")
 
     # -------------------------------------------------
-    # 1. LOAD DATA (FIXED QUERY + JOIN)
+    # 🔥 STEP 1: FIND REAL MAX DATE IN DB
+    # -------------------------------------------------
+    max_date = db.query(
+        GoogleTrendsTimeseries.date
+    ).order_by(
+        GoogleTrendsTimeseries.date.desc()
+    ).first()
+
+    if not max_date:
+        print("❌ No data in DB")
+        return []
+
+    max_date = max_date[0]
+
+    # -------------------------------------------------
+    # 🔥 STEP 2: USE SAFE END DATE
+    # -------------------------------------------------
+    if end_date is None or end_date > max_date:
+        end_date = max_date
+
+    start_date = end_date - timedelta(days=window_days)
+
+    print(f"📅 Using window: {start_date} → {end_date}")
+
+    # -------------------------------------------------
+    # 🔥 STEP 3: FETCH DATA
     # -------------------------------------------------
     rows = (
-        db.query(GoogleTrendsTimeseries)
-        .join(GoogleTrendsKeyword)
+        db.query(
+            GoogleTrendsTimeseries,
+            GoogleTrendsKeyword,
+        )
+        .join(
+            GoogleTrendsKeyword,
+            GoogleTrendsTimeseries.keyword_id == GoogleTrendsKeyword.id
+        )
+        .filter(
+            GoogleTrendsTimeseries.date >= start_date,
+            GoogleTrendsTimeseries.date <= end_date
+        )
         .all()
     )
 
+    # -------------------------------------------------
+    # 🔥 FALLBACK IF TOO SMALL
+    # -------------------------------------------------
+    if len(rows) < 20:
+        print("⚠️ Sparse data → expanding window")
+
+        rows = (
+            db.query(
+                GoogleTrendsTimeseries,
+                GoogleTrendsKeyword,
+            )
+            .join(
+                GoogleTrendsKeyword,
+                GoogleTrendsTimeseries.keyword_id == GoogleTrendsKeyword.id
+            )
+            .all()
+        )
+
     if not rows:
-        print("⚠️ No Google Trends data found")
+        print("❌ No data found")
         return []
 
     # -------------------------------------------------
-    # 2. BUILD DATAFRAME (FIXED FIELDS)
+    # BUILD DATA
     # -------------------------------------------------
-    df = pd.DataFrame([{
-        "keyword": r.keyword.keyword_text.strip().lower(),   # ✅ FIXED
-        "date": r.date,
-        "interest": r.interest_index                         # ✅ FIXED
-    } for r in rows])
+    data = []
+
+    for ts, kw in rows:
+        keyword = kw.keyword_text.lower().strip()
+        matches = map_keyword(keyword)
+
+        for disease, weight in matches:
+            data.append({
+                "disease": disease,
+                "keyword": keyword,
+                "weight": weight,
+                "date": ts.date,
+                "interest": ts.interest_index,
+            })
+
+    df = pd.DataFrame(data)
+
+    if df.empty:
+        print("⚠️ No mapped symptoms")
+        return []
 
     df["date"] = pd.to_datetime(df["date"])
 
-    print(f"📊 Loaded {len(df)} rows")
+    # -------------------------------------------------
+    # 🔥 FIX NORMALIZATION (CRITICAL)
+    # -------------------------------------------------
+    def safe_normalize(x):
+        if x.max() == x.min():
+            return x / (x.max() + 1e-9)
+        return (x - x.min()) / (x.max() - x.min())
+
+    df["normalized"] = df.groupby("keyword")["interest"].transform(safe_normalize)
 
     # -------------------------------------------------
-    # 3. NORMALIZE PER KEYWORD
+    # WEIGHTED SCORE
     # -------------------------------------------------
-    df["normalized"] = df.groupby("keyword")["interest"].transform(
-        lambda x: (x - x.min()) / (x.max() - x.min() + 1e-9)
-    )
-
-    # -------------------------------------------------
-    # 4. TIME WINDOW
-    # -------------------------------------------------
-    latest_date = df["date"].max()
-    cutoff_date = latest_date - timedelta(days=window_days)
-
-    df = df[df["date"] >= cutoff_date]
-
-    print(f"🕒 Using data from {cutoff_date.date()} → {latest_date.date()}")
-
-    # -------------------------------------------------
-    # 5. KEYWORD SCORES
-    # -------------------------------------------------
-    keyword_scores = (
-        df.groupby("keyword")["normalized"]
-        .mean()
-        .reset_index()
-        .rename(columns={"normalized": "keyword_score"})
-    )
-
-    # -------------------------------------------------
-    # 6. LOAD KEYWORD → DISEASE MAPPING (FIXED FIELD)
-    # -------------------------------------------------
-    mappings = db.query(GoogleTrendsKeyword).all()
-
-    map_df = pd.DataFrame([{
-        "keyword": m.keyword_text.strip().lower(),  # ✅ FIXED
-        "disease_id": m.disease_id,
-        "weight": m.weight if m.weight else 1.0
-    } for m in mappings if m.disease_id is not None])
-
-    if map_df.empty:
-        print("⚠️ No keyword mappings found")
-        return []
-
-    # -------------------------------------------------
-    # 7. MERGE
-    # -------------------------------------------------
-    merged = pd.merge(keyword_scores, map_df, on="keyword", how="inner")
-
-    if merged.empty:
-        print("⚠️ No matching keywords after merge")
-        return []
-
-    # -------------------------------------------------
-    # 8. WEIGHTED SCORING
-    # -------------------------------------------------
-    merged["weighted_score"] = merged["keyword_score"] * merged["weight"]
+    df["weighted_score"] = df["normalized"] * df["weight"]
 
     disease_scores = (
-        merged.groupby("disease_id")
-        .apply(lambda x: x["weighted_score"].sum() / x["weight"].sum())
-        .reset_index(name="score")
+        df.groupby("disease")["weighted_score"]
+        .sum()
+        .reset_index()
     )
 
-    # -------------------------------------------------
-    # 9. MAP DISEASE NAMES
-    # -------------------------------------------------
-    diseases = db.query(Disease).all()
-    disease_map = {d.id: d.name for d in diseases}
+    results = []
 
-    disease_scores["disease"] = disease_scores["disease_id"].map(disease_map)
+    for _, row in disease_scores.iterrows():
+        score = row["weighted_score"]
 
-    # -------------------------------------------------
-    # 10. RISK LEVEL
-    # -------------------------------------------------
-    def get_risk_level(score):
-        if score >= 0.7:
-            return "HIGH"
-        elif score >= 0.4:
-            return "MEDIUM"
-        elif score > 0:
-            return "LOW"
-        else:
-            return "NONE"
+        results.append({
+            "disease": row["disease"],
+            "score": round(score, 3),
+            "risk_level": (
+                "HIGH" if score >= 3.5 else
+                "MEDIUM" if score >= 1.5 else
+                "LOW"
+            ),
+        })
 
-    disease_scores["risk_level"] = disease_scores["score"].apply(get_risk_level)
+    print("🔥 FINAL DISEASE RANKING:", results)
 
-    # -------------------------------------------------
-    # 11. OUTPUT
-    # -------------------------------------------------
-    result = disease_scores[["disease", "score", "risk_level"]].to_dict(orient="records")
-
-    print("✅ Disease scoring completed")
-
-    return result
+    return sorted(results, key=lambda x: x["score"], reverse=True)
 
 
 # -------------------------------------------------
-# 🔥 STORAGE FUNCTION
+# STORE
 # -------------------------------------------------
-def store_disease_risk(db: Session, disease_risk_data):
-    today = date.today()
-
-    print("🔥 Storing disease risk data...")
-
-    inserted_count = 0
-    updated_count = 0
-
+def store_disease_risk(
+    db: Session,
+    disease_risk_data,
+    calculation_date: date
+):
     for item in disease_risk_data:
-        disease_name = item["disease"].lower().strip()
-
-        disease = (
-            db.query(Disease)
-            .filter(Disease.name.ilike(disease_name))
-            .first()
-        )
-
-        if not disease:
-            print(f"[WARNING] Disease not found: {disease_name}")
-            continue
-
-        existing = (
-            db.query(DiseaseRisk)
-            .filter(DiseaseRisk.disease_id == disease.id)
-            .filter(DiseaseRisk.date_calculated == today)
-            .first()
-        )
-
-        score = float(item["score"])
+        existing = db.query(DiseaseRisk).filter(
+            DiseaseRisk.disease_name == item["disease"],
+            DiseaseRisk.date_calculated == calculation_date
+        ).first()
 
         if existing:
-            existing.risk_score = score
+            existing.risk_score = item["score"]
             existing.risk_level = item["risk_level"]
-            existing.created_at = datetime.utcnow()
-            updated_count += 1
         else:
-            record = DiseaseRisk(
-                disease_id=disease.id,
-                disease_name=disease.name,
-                risk_score=score,
+            db.add(DiseaseRisk(
+                disease_name=item["disease"],
+                risk_score=item["score"],
                 risk_level=item["risk_level"],
-                date_calculated=today,
-                created_at=datetime.utcnow(),
-            )
-            db.add(record)
-            inserted_count += 1
+                date_calculated=calculation_date,
+                created_at=datetime.utcnow()
+            ))
 
     db.commit()
 
-    print(f"✅ Stored: inserted={inserted_count}, updated={updated_count}")
-
 
 # -------------------------------------------------
-# 🔥 PIPELINE HELPER
+# PIPELINE
 # -------------------------------------------------
-def run_full_risk_pipeline(db: Session):
-    results = compute_disease_risk(db)
+def run_full_risk_pipeline(
+    db: Session,
+    analysis_date: date | None = None
+):
+    if analysis_date is None:
+        analysis_date = date.today()
 
-    if not results:
-        print("⚠️ No results to store")
-        return []
+    results = compute_disease_risk(
+        db,
+        end_date=analysis_date
+    )
 
-    store_disease_risk(db, results)
+    if results:
+        store_disease_risk(
+            db,
+            results,
+            calculation_date=analysis_date
+        )
 
     return results

@@ -9,8 +9,6 @@ from app.api import signal_api
 from app.api.upload_api import router as upload_router
 from app.api.analysis_api import router as analysis_router
 from app.api.alert_api import router as alert_router
-
-# ✅ ADD THIS
 from app.api.ranking_api import router as ranking_router
 
 # -------------------------------------------------
@@ -22,49 +20,61 @@ app = FastAPI(
 )
 
 # -------------------------------------------------
-# 🚀 CORS (IMPORTANT FOR FRONTEND)
+# 🚀 CORS (SIMPLE + RELIABLE)
 # -------------------------------------------------
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://5173-firebase-early-warning-1772198111524.cluster-fdkw7vjj7bgguspe3fbbc25tra.cloudworkstations.dev",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # -------------------------------------------------
-# Register Routers
+# Register Routers (FIXED)
 # -------------------------------------------------
 
-# Upload
-app.include_router(upload_router)
+# Upload (CSV, history)
+app.include_router(
+    upload_router,
+    prefix="/api/trends",
+    tags=["Upload"]
+)
 
-# Existing
-app.include_router(trends.router)
-app.include_router(signal_api.router)
+# Trends
+app.include_router(
+    trends.router,
+    prefix="/api/trends",
+    tags=["Trends"]
+)
+
+# ✅ FIXED SIGNAL ROUTE (IMPORTANT)
+app.include_router(
+    signal_api.router,
+    prefix="/api",   # 🔥 FIX HERE
+    tags=["Signal"]
+)
 
 # Analysis
 app.include_router(
     analysis_router,
-    prefix="/analysis",
+    prefix="/api/analysis",
     tags=["Analysis"]
 )
 
 # Alerts
 app.include_router(
     alert_router,
-    prefix="/alerts",
+    prefix="/api/alerts",
     tags=["Alerts"]
 )
 
-# 🔥 ADD THIS (VERY IMPORTANT)
-app.include_router(ranking_router)
+# Ranking
+app.include_router(
+    ranking_router,
+    prefix="/api/ranking",
+    tags=["Ranking"]
+)
 
 # -------------------------------------------------
 # Root

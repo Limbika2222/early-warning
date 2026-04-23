@@ -1,12 +1,10 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState } from "react"
 import Calendar from "react-calendar"
 import "react-calendar/dist/Calendar.css"
 import "../styles/calendar.css"
 
-import { fetchSignalData, runAnalysis } from "../api/signal"
-import MetricCard from "../components/dashboard/MetricCard"
 import DiseaseRankingBar from "../components/charts/DiseaseRankingBar"
 
 import {
@@ -19,21 +17,31 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts"
 
-type DateRange = [Date, Date]
+// ---------------- TYPES ----------------
 
-/* =========================
-   TYPES
-========================= */
-
-interface TrendPoint {
+interface ApiTrendPoint {
   date: string
   value?: number
   interest?: number
   symptom?: string
   is_spike?: boolean
 }
+
+interface ApiResponse {
+  trend_data: ApiTrendPoint[]
+  metrics: {
+    signal_index: number
+    spike_count: number
+    risk_level: string
+  }
+}
+
+type DateRange = [Date, Date]
 
 interface TrendData {
   date: string
@@ -42,276 +50,252 @@ interface TrendData {
   is_spike: boolean
 }
 
-type TimeSeriesRow = {
+interface RankingItem {
+  disease: string
+  risk_score: number
+  risk_level: string
+}
+
+interface TimeSeriesRow {
   date: string
-  [key: string]: string | number
+  [key: string]: number | string
 }
 
-/* =========================
-   DISEASE MAP
-========================= */
+const COLORS = ["#6366F1", "#E5E7EB"]
 
-const diseaseMap: Record<string, string[]> = {
-  fever: ["Malaria", "Flu", "COVID"],
-  cough: ["Flu", "COVID"],
-  fatigue: ["COVID"],
-  headache: ["Malaria", "Dengue"],
+// ---------------- DONUT ----------------
+function Donut({
+  value,
+  max,
+  label,
+}: {
+  value: number
+  max: number
+  label: string
+}) {
+  const percentage = Math.min((value / max) * 100, 100)
+
+  return (
+    <div className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center">
+      <ResponsiveContainer width={100} height={100}>
+        <PieChart>
+          <Pie
+            data={[{ value: percentage }, { value: 100 - percentage }]}
+            innerRadius={30}
+            outerRadius={40}
+            dataKey="value"
+          >
+            <Cell fill={COLORS[0]} />
+            <Cell fill={COLORS[1]} />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+
+      <p className="text-sm font-semibold mt-2">{label}</p>
+      <p className="text-xs text-gray-500">{Math.round(value)}</p>
+    </div>
+  )
 }
 
-/* ========================= */
-
+// ---------------- COMPONENT ----------------
 export default function NewDashboard() {
   const [data, setData] = useState<TrendData[]>([])
+  const [ranking, setRanking] = useState<{ name: string; value: number }[]>([])
+
   const [signalIndex, setSignalIndex] = useState(0)
   const [spikeCount, setSpikeCount] = useState(0)
-  const [riskLevel, setRiskLevel] = useState("No Data")
-  const [loading, setLoading] = useState(false)
+  const [riskLevel, setRiskLevel] = useState("LOW")
 
+  const [topSymptoms, setTopSymptoms] = useState<string[]>([])
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
 
-  const formatDate = (date: Date) =>
-    date.toISOString().split("T")[0]
+  const formatDate = (d: Date) => d.toISOString().split("T")[0]
 
-  /* =========================
-     🔥 LOAD SIGNAL (REAL DATA)
-  ========================== */
+  const handleReset = () => setDateRange(null)
 
-  const loadSignal = useCallback(async () => {
-    try {
-      setLoading(true)
-
-      const res = await fetchSignalData("google", 1, 1)
-
-      const raw: TrendPoint[] = res?.trend_data || []
-
-      let transformed: TrendData[] = raw.map((d) => ({
-        date: d.date,
-        interest: d.interest ?? d.value ?? 0,
-        symptom: (d.symptom ?? "unknown").toLowerCase(),
-        is_spike: d.is_spike ?? false,
-      }))
-
-      // 🔥 Date filtering
-      if (dateRange) {
-        const [start, end] = dateRange
-        transformed = transformed.filter(
-          (d) =>
-            d.date >= formatDate(start) &&
-            d.date <= formatDate(end)
-        )
-      }
-
-      setData(transformed)
-
-      // 🔥 Safe metrics
-      setSignalIndex(res?.metrics?.signal_index ?? 0)
-      setSpikeCount(res?.metrics?.spike_count ?? 0)
-      setRiskLevel(res?.metrics?.risk_level ?? "No Data")
-
-    } catch (err) {
-      console.error("Error loading signal:", err)
-    } finally {
-      setLoading(false)
-    }
-  }, [dateRange])
-
-  /* =========================
-     🔥 RUN ANALYSIS + REFRESH
-  ========================== */
-
-  const handleRunAnalysis = async () => {
-    try {
-      setLoading(true)
-      await runAnalysis()
-      await loadSignal() // 🔥 refresh after pipeline
-    } catch (err) {
-      console.error("Analysis failed:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  // -------------------------------------------------
+  // LOAD DATA
+  // -------------------------------------------------
   useEffect(() => {
-    loadSignal()
-  }, [loadSignal])
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_BASE}/api/signal?source=google&disease_id=1&country_id=1`
+        )
 
-  /* =========================
-     🔥 INTELLIGENCE LAYER
-  ========================== */
+        const json: ApiResponse = await res.json()
 
-  const symptomAgg = Object.values(
-    data.reduce(
-      (acc: Record<string, { name: string; value: number }>, row) => {
-        const symptom = row.symptom
+        let transformed: TrendData[] = (json.trend_data || [])
+          .map((d) => {
+            const value = d.value ?? d.interest ?? 0
 
-        if (!acc[symptom]) {
-          acc[symptom] = { name: symptom, value: 0 }
+            return {
+              date: d.date,
+              interest: value,
+              symptom: (d.symptom || "").toLowerCase().trim(),
+              is_spike: d.is_spike ?? false,
+            }
+          })
+          .filter(
+            (d) =>
+              d.symptom &&
+              d.symptom !== "other" &&
+              d.symptom.length > 2 &&
+              d.interest > 0
+          )
+
+        // DATE FILTER
+        if (dateRange) {
+          const [start, end] = dateRange
+          transformed = transformed.filter(
+            (d) =>
+              d.date >= formatDate(start) &&
+              d.date <= formatDate(end)
+          )
         }
 
-        acc[symptom].value += row.interest
-        return acc
-      },
-      {}
-    )
-  )
+        setData(transformed)
 
-  const diseaseScores = Object.entries(
-    data.reduce((acc: Record<string, number>, row) => {
-      const diseases = diseaseMap[row.symptom] || []
+        setSignalIndex(json.metrics.signal_index)
+        setSpikeCount(json.metrics.spike_count)
+        setRiskLevel(json.metrics.risk_level)
 
-      diseases.forEach((disease) => {
-        acc[disease] = (acc[disease] || 0) + row.interest
-      })
+        // TOP SYMPTOMS
+        const totals: Record<string, number> = {}
+
+        transformed.forEach((d) => {
+          totals[d.symptom] = (totals[d.symptom] || 0) + d.interest
+        })
+
+        const top = Object.entries(totals)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([k]) => k)
+
+        setTopSymptoms(top)
+
+        // RANKING
+        const rankingRes = await fetch(
+          `${import.meta.env.VITE_API_BASE}/api/ranking/diseases`
+        )
+
+        const rankingData: RankingItem[] = await rankingRes.json()
+
+        setRanking(
+          rankingData.map((r) => ({
+            name: r.disease,
+            value: r.risk_score,
+          }))
+        )
+      } catch (err) {
+        console.error("🔥 LOAD ERROR:", err)
+      }
+    }
+
+    load()
+  }, [dateRange])
+
+  // ---------------- TIME SERIES ----------------
+  const symptomTimeSeries: TimeSeriesRow[] = Object.values(
+    data.reduce<Record<string, TimeSeriesRow>>((acc, row) => {
+      if (!acc[row.date]) acc[row.date] = { date: row.date }
+
+      if (topSymptoms.includes(row.symptom)) {
+        acc[row.date][row.symptom] = row.interest
+      }
 
       return acc
     }, {})
   )
-    .map(([name, value]) => ({
-      name,
-      value,
-      year: 2024, // 🔥 dynamic later if needed
-    }))
-    .sort((a, b) => b.value - a.value)
 
-  const symptomTimeSeries: TimeSeriesRow[] = Object.values(
-    data.reduce(
-      (acc: Record<string, TimeSeriesRow>, row) => {
-        const date = row.date
-
-        if (!acc[date]) {
-          acc[date] = { date }
+  // ---------------- DISTRIBUTION ----------------
+  const symptomAgg = Object.values(
+    data.reduce<Record<string, { name: string; value: number }>>(
+      (acc, row) => {
+        if (!acc[row.symptom]) {
+          acc[row.symptom] = { name: row.symptom, value: 0 }
         }
-
-        acc[date][row.symptom] = row.interest
-
+        acc[row.symptom].value += row.interest
         return acc
       },
       {}
     )
   )
 
-  /* =========================
-     🔥 ILLNESS CLASSIFICATION
-  ========================== */
-
-  const illnessScores = data.reduce((acc: Record<string, number>, row) => {
-    const symptom = row.symptom
-
-    if (["fever", "cough", "fatigue"].includes(symptom)) {
-      acc["respiratory"] = (acc["respiratory"] || 0) + row.interest
-    }
-
-    if (["anosmia", "loss_of_taste", "breathlessness"].includes(symptom)) {
-      acc["covid"] = (acc["covid"] || 0) + row.interest
-    }
-
-    if (["headache"].includes(symptom)) {
-      acc["general"] = (acc["general"] || 0) + row.interest
-    }
-
-    return acc
-  }, {})
-
-  function classifyIllness(scores: Record<string, number>) {
-    const respiratory = scores["respiratory"] || 0
-    const covid = scores["covid"] || 0
-
-    if (covid > respiratory * 0.4 && covid > 20) {
-      return {
-        label: "COVID-like Illness",
-        risk: "HIGH",
-        color: "text-red-500",
-      }
-    }
-
-    if (respiratory > 20) {
-      return {
-        label: "Influenza-like Illness",
-        risk: "MEDIUM",
-        color: "text-yellow-500",
-      }
-    }
-
-    return {
-      label: "General Infection",
-      risk: "LOW",
-      color: "text-green-500",
-    }
+  const riskMap: Record<string, number> = {
+    LOW: 1,
+    MEDIUM: 2,
+    HIGH: 3,
   }
 
-  const illness = classifyIllness(illnessScores)
-
-  /* ========================= */
+  const riskValue = riskMap[riskLevel] || 1
 
   return (
     <div className="bg-[#F8FAFC] min-h-screen p-6 grid grid-cols-12 gap-6">
 
+      {/* LEFT SIDE */}
       <div className="col-span-12 lg:col-span-9 space-y-6">
 
-        <h1 className="text-xl font-semibold text-gray-800">
-          Infodemiology Dashboard
-        </h1>
+        <h1 className="text-xl font-semibold">Infodemiology Dashboard</h1>
 
         {/* METRICS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard title="Signal" value={signalIndex.toFixed(2)} />
-          <MetricCard title="Spikes" value={spikeCount} />
-          <MetricCard title="Risk" value={riskLevel} />
-          <MetricCard title="Data" value={data.length} />
+          <Donut label="Signal" value={signalIndex} max={5} />
+          <Donut label="Spikes" value={spikeCount} max={10} />
+          <Donut label="Risk" value={riskValue} max={3} />
+          <Donut label="Data" value={data.length} max={5000} />
         </div>
 
-        {/* CLASSIFICATION */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-indigo-500">
-          <h2 className="text-sm text-gray-500 mb-1">
-            Illness Classification
-          </h2>
-
-          <p className={`text-lg font-semibold ${illness.color}`}>
-            {illness.label}
-          </p>
-
-          <p className="text-xs text-gray-400 mt-1">
-            Risk Level: {illness.risk}
-          </p>
-        </div>
-
-        {/* 🔥 REAL DATA RANKING */}
-        <DiseaseRankingBar data={diseaseScores} />
+        {/* RANKING */}
+        <DiseaseRankingBar data={ranking} />
 
         {/* CHARTS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          <div className="bg-white p-4 rounded-2xl shadow-sm">
-            <h2 className="text-sm mb-2 text-gray-600">
-              Top Symptoms Over Time
-            </h2>
+          {/* TIME SERIES */}
+          <div className="bg-white p-4 rounded-2xl">
+            <h2 className="text-sm mb-2">Top Symptoms Over Time</h2>
 
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={symptomTimeSeries}>
                 <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="date" />
+                <XAxis
+                  dataKey="date"
+                  angle={-35}
+                  textAnchor="end"
+                  height={60}
+                />
                 <YAxis />
                 <Tooltip />
 
-                <Area type="monotone" dataKey="fever" stroke="#6366F1" fillOpacity={0.15} />
-                <Area type="monotone" dataKey="cough" stroke="#10B981" fillOpacity={0.15} />
-                <Area type="monotone" dataKey="fatigue" stroke="#F59E0B" fillOpacity={0.15} />
+                {topSymptoms.map((s) => (
+                  <Area key={s} type="monotone" dataKey={s} />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl shadow-sm">
-            <h2 className="text-sm mb-2 text-gray-600">
-              Symptom Distribution
-            </h2>
+          {/* DISTRIBUTION FIXED */}
+          <div className="bg-white p-4 rounded-2xl">
+            <h2 className="text-sm mb-2">Symptom Distribution</h2>
 
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={symptomAgg}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={symptomAgg} margin={{ bottom: 80 }}>
                 <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="name" />
+
+                <XAxis
+                  dataKey="name"
+                  interval={0}            // 🔥 SHOW ALL LABELS
+                  minTickGap={0}         // 🔥 NO AUTO HIDE
+                  angle={-40}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fontSize: 10 }}
+                />
+
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="value" fill="#6366F1" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="value" fill="#6366F1" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -319,21 +303,21 @@ export default function NewDashboard() {
         </div>
       </div>
 
-      {/* CALENDAR */}
-      <div className="col-span-12 lg:col-span-3 bg-white p-4 rounded-2xl shadow-sm">
+      {/* RIGHT SIDE */}
+      <div className="col-span-12 lg:col-span-3 bg-white p-4 rounded-2xl space-y-3">
         <Calendar
           selectRange
-          onChange={(value) => setDateRange(value as DateRange)}
+          onChange={(v) => setDateRange(v as DateRange)}
+          value={dateRange || undefined}
         />
 
         <button
-          onClick={handleRunAnalysis}
-          className="mt-4 w-full bg-[#6366F1] hover:bg-[#4F46E5] text-white py-2 rounded-xl"
+          onClick={handleReset}
+          className="w-full bg-gray-200 py-2 rounded-xl text-sm"
         >
-          {loading ? "Running..." : "Run Analysis"}
+          Reset View
         </button>
       </div>
-
     </div>
   )
 }

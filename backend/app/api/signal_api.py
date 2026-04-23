@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 from collections import defaultdict
 from typing import Optional
+import re
 
 from app.services.google_trends_store import (
     fetch_google_trends_by_keyword,
@@ -8,7 +9,6 @@ from app.services.google_trends_store import (
 )
 from app.services.analytics_service import analyze_trends
 
-# 🔥 NEW IMPORT (DB-driven ranking)
 from app.utils.database import SessionLocal
 from app.models.google_trends import (
     GoogleTrendsTimeseries,
@@ -16,14 +16,45 @@ from app.models.google_trends import (
     Disease,
 )
 
-router = APIRouter(
-    prefix="/api",
-    tags=["Signal Analytics"],
-)
+router = APIRouter(tags=["Signal Analytics"])
 
 
 # ==========================================================
-# 🔥 SYMPTOM-LEVEL SIGNAL (UNCHANGED CORE)
+# 🔥 CLEAN KEYWORD (FINAL VERSION)
+# ==========================================================
+def normalize_keyword(keyword: str) -> str:
+    if not keyword:
+        return ""
+
+    keyword = keyword.lower().strip()
+
+    # 🔥 REMOVE DUPLICATES (.1, .2, etc)
+    keyword = re.sub(r"\.\d+$", "", keyword)
+
+    # remove noise
+    keyword = keyword.replace("-", " ")
+    keyword = keyword.replace("_", " ")
+
+    keyword = keyword.replace("symptoms of", "")
+    keyword = keyword.replace("symptom of", "")
+
+    keyword = keyword.replace("influenza-like illness", "flu")
+    keyword = keyword.replace("covid-19", "covid")
+
+    keyword = re.sub(r"\s+", " ", keyword)
+
+    return keyword.strip()
+
+
+# ==========================================================
+# 🔥 SAFE VALUE EXTRACTION
+# ==========================================================
+def get_value(row):
+    return row.get("value", row.get("interest", 0))
+
+
+# ==========================================================
+# 🔥 SYMPTOM SIGNAL API (FIXED)
 # ==========================================================
 @router.get("/signal")
 def get_signal(
@@ -33,29 +64,41 @@ def get_signal(
     start_date: str = Query(""),
     end_date: str = Query(""),
 ):
-    """
-    Returns SYMPTOM-LEVEL signal data (NOT aggregated)
-    """
+    print("🔥 SIGNAL API CALLED")
 
     keywords = fetch_keywords_for_disease(disease_id)
 
+    # -------------------------------------------------
+    # FALLBACK
+    # -------------------------------------------------
     if not keywords:
-        return {
-            "source": source,
-            "metrics": {
-                "signal_index": 0,
-                "spike_count": 0,
-                "momentum_percent": 0,
-                "risk_level": "No Data",
-            },
-            "trend_data": [],
-        }
+        print("⚠️ No disease mapping → fallback to ALL keywords")
+
+        db = SessionLocal()
+        try:
+            keywords = [
+                k.keyword_text
+                for k in db.query(GoogleTrendsKeyword).all()
+            ]
+        finally:
+            db.close()
 
     trend_data = []
     all_values = []
     all_dates = []
 
+    # -------------------------------------------------
+    # MAIN LOOP
+    # -------------------------------------------------
     for keyword in keywords:
+        clean_keyword = normalize_keyword(keyword)
+
+        # 🔥 SKIP BAD KEYWORDS
+        if not clean_keyword or len(clean_keyword) < 2:
+            continue
+
+        print(f"👉 RAW: {keyword} → CLEAN: {clean_keyword}")
+
         data = fetch_google_trends_by_keyword(
             keyword=keyword,
             country_id=country_id,
@@ -66,34 +109,44 @@ def get_signal(
         if not data:
             continue
 
-        values = [row["value"] for row in data]
+        values = [get_value(row) for row in data]
         dates = [row["date"] for row in data]
+
+        # 🔥 skip empty series
+        if not any(values):
+            continue
 
         analysis = analyze_trends(values, dates)
 
         for point in analysis["trend_data"]:
+            val = point.get("value", 0)
+
             trend_data.append(
                 {
                     "date": point["date"],
-                    "symptom": keyword.lower(),  # 🔥 normalized
-                    "interest": point["value"],
-                    "ewma": point["ewma"],
-                    "ucl": point["ucl"],
-                    "is_spike": point["is_spike"],
+                    "symptom": clean_keyword,   # ✅ CRITICAL FIX
+                    "value": val,
+                    "interest": val,
+                    "ewma": point.get("ewma"),
+                    "ucl": point.get("ucl"),
+                    "is_spike": point.get("is_spike", False),
                 }
             )
 
         all_values.extend(values)
         all_dates.extend(dates)
 
-    # 🔥 Global metrics
+    # -------------------------------------------------
+    # METRICS
+    # -------------------------------------------------
     if all_values:
         global_analysis = analyze_trends(all_values, all_dates)
+
         metrics = {
-            "signal_index": global_analysis["signal_index"],
-            "spike_count": global_analysis["spike_count"],
-            "momentum_percent": global_analysis["momentum_percent"],
-            "risk_level": global_analysis["risk_level"],
+            "signal_index": global_analysis.get("signal_index", 0),
+            "spike_count": global_analysis.get("spike_count", 0),
+            "momentum_percent": global_analysis.get("momentum_percent", 0),
+            "risk_level": global_analysis.get("risk_level", "LOW"),
         }
     else:
         metrics = {
@@ -103,6 +156,8 @@ def get_signal(
             "risk_level": "No Data",
         }
 
+    print(f"✅ Returning {len(trend_data)} points")
+
     return {
         "source": source,
         "metrics": metrics,
@@ -111,7 +166,7 @@ def get_signal(
 
 
 # ==========================================================
-# 🔥 NEW: DISEASE RANKING (DB-DRIVEN + WEIGHTED)
+# 🔥 DISEASE RANKING (UNCHANGED)
 # ==========================================================
 @router.get("/disease-ranking")
 def get_disease_ranking(
@@ -119,14 +174,6 @@ def get_disease_ranking(
     start_date: str = Query(""),
     end_date: str = Query(""),
 ):
-    """
-    Aggregate symptom signals → disease ranking
-
-    Uses:
-    - keyword → disease_id
-    - keyword.weight (importance)
-    """
-
     db = SessionLocal()
 
     try:
@@ -170,7 +217,6 @@ def get_disease_ranking(
             value = ts.interest_index
             weight = keyword.weight or 1.0
 
-            # 🔥 WEIGHTED SCORING
             disease_scores[disease.name] += value * weight
 
         result = [

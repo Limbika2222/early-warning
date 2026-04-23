@@ -1,7 +1,7 @@
 // src/api/trends.ts
 
 // --------------------------------
-// Shared types
+// Types
 // --------------------------------
 export type TrendPoint = {
   date: string
@@ -10,8 +10,7 @@ export type TrendPoint = {
 
 export type UploadHistoryItem = {
   id: number
-  keyword: string
-  disease_id: number
+  keyword: string        // 🔥 matches backend (keywords string)
   country: string
   rows_inserted: number
   uploaded_at: string
@@ -28,40 +27,47 @@ if (!RAW_BASE) {
   )
 }
 
-// Ensure no trailing slash
+// Remove trailing slash
 const CLEAN_BASE = RAW_BASE.endsWith("/")
   ? RAW_BASE.slice(0, -1)
   : RAW_BASE
 
-// Final API base for trends routes
+// Final API base
 const API_BASE = `${CLEAN_BASE}/api/trends`
 
 // --------------------------------
-// Helper: Safe fetch wrapper
+// Helper: Safe fetch
 // --------------------------------
 async function safeFetch<T>(
   url: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(url, options)
+  try {
+    const res = await fetch(url, options)
 
-  const contentType = res.headers.get("content-type")
+    const contentType = res.headers.get("content-type")
 
-  if (!res.ok) {
-    if (contentType?.includes("application/json")) {
-      const errorData = await res.json()
-      throw new Error(errorData.detail || "Request failed")
-    } else {
-      const text = await res.text()
-      throw new Error(text || "Request failed")
+    if (!res.ok) {
+      if (contentType?.includes("application/json")) {
+        const errorData = await res.json()
+        console.error("❌ API Error:", errorData)
+        throw new Error(errorData.detail || "Request failed")
+      } else {
+        const text = await res.text()
+        console.error("❌ API Error:", text)
+        throw new Error(text || "Request failed")
+      }
     }
-  }
 
-  return res.json()
+    return res.json()
+  } catch (err) {
+    console.error("❌ Fetch failed:", err)
+    throw err
+  }
 }
 
 // --------------------------------
-// Interest over time (single keyword)
+// Interest over time
 // --------------------------------
 export async function fetchInterestOverTime(
   keywordId: number,
@@ -95,14 +101,15 @@ export async function fetchAggregatedDiseaseSignal(
 }
 
 // --------------------------------
-// Upload CSV
+// Upload CSV (🔥 FIXED TYPE)
 // --------------------------------
 export async function uploadCsv(
   formData: FormData
 ): Promise<{
   status: string
+  upload_id: number
+  keywords_processed: number
   rows_inserted: number
-  date_range: { start: string; end: string }
 }> {
   return safeFetch(
     `${API_BASE}/upload-csv`,
@@ -114,7 +121,7 @@ export async function uploadCsv(
 }
 
 // --------------------------------
-// Upload history (CORRECT ROUTE)
+// Upload history (🔥 MATCHES BACKEND)
 // --------------------------------
 export async function fetchUploadHistory(): Promise<UploadHistoryItem[]> {
   return safeFetch<UploadHistoryItem[]>(
