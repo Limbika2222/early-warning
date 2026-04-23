@@ -47,15 +47,29 @@ export default function ChartsGrid({
           endDate
         )
 
-        setData(res.trend_data)
+        const raw = res.trend_data || []
+
+        // ✅ SAFE TRANSFORM (NO TYPE ERROR)
+        const withChange: TrendPoint[] = raw.map((d, i, arr) => {
+          const current = d.interest ?? 0
+          const prev = i > 0 ? arr[i - 1].interest ?? 0 : current
+
+          return {
+            ...d,
+            interest: current,
+            change: current - prev,
+          }
+        })
+
+        setData(withChange)
 
         onMetricsChange({
           signalIndex: res.metrics.signal_index,
           spikeCount: res.metrics.spike_count,
           riskLevel: res.metrics.risk_level,
         })
-      } catch {
-        console.log("Failed to load chart data")
+      } catch (err) {
+        console.error("Failed to load chart data", err)
       }
     }
 
@@ -72,15 +86,27 @@ export default function ChartsGrid({
           <Tooltip />
           <Legend />
 
+          {/* BASELINE */}
           <Line
             type="monotone"
-            dataKey="value"
-            name="Signal"
-            stroke="#10b981"
-            strokeWidth={2}
+            dataKey="interest"
+            name="Interest"
+            stroke="#94a3b8"
+            strokeWidth={1}
             dot={false}
           />
 
+          {/* 🔥 MAIN SIGNAL */}
+          <Line
+            type="monotone"
+            dataKey="change"
+            name="Change"
+            stroke="#10b981"
+            strokeWidth={3}
+            dot={false}
+          />
+
+          {/* OPTIONAL */}
           <Line
             type="monotone"
             dataKey="ewma"
@@ -90,21 +116,13 @@ export default function ChartsGrid({
             dot={false}
           />
 
-          <Line
-            type="monotone"
-            dataKey="ucl"
-            name="UCL"
-            stroke="#ef4444"
-            strokeDasharray="5 5"
-            dot={false}
-          />
-
+          {/* SPIKES */}
           {data.map((point, index) =>
             point.is_spike ? (
               <ReferenceDot
                 key={index}
                 x={point.date}
-                y={point.value}
+                y={point.change ?? 0}
                 r={5}
                 fill="red"
               />

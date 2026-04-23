@@ -7,6 +7,7 @@ from sqlalchemy import (
     Float,
     Boolean,
     DateTime,
+    BigInteger,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -36,19 +37,21 @@ class Country(Base):
     iso3 = Column(String(3), unique=True, nullable=False)
 
     timeseries = relationship("GoogleTrendsTimeseries", back_populates="country")
+    uploads = relationship("GoogleTrendsUpload", back_populates="country")
 
 
 # =====================================================
-# Keywords
+# Keywords (Symptoms → Disease mapping)
 # =====================================================
 class GoogleTrendsKeyword(Base):
     __tablename__ = "google_trends_keywords"
 
     id = Column(Integer, primary_key=True)
 
+    # 🔥 links symptom → disease
     disease_id = Column(Integer, ForeignKey("diseases.id"), nullable=True)
 
-    keyword_text = Column(String, nullable=False)
+    keyword_text = Column(String, nullable=False, index=True)
     language = Column(String)
     category = Column(String)
 
@@ -75,7 +78,8 @@ class GoogleTrendsTimeseries(Base):
     date = Column(Date, nullable=False)
     interest_index = Column(Integer, nullable=False)
 
-    upload_id = Column(Integer, nullable=True)
+    # 🔥 CRITICAL: identifies which upload this data belongs to
+    upload_id = Column(BigInteger, index=True, nullable=True)
 
     source = Column(String, default="google_trends_csv")
     fetched_at = Column(DateTime, default=datetime.utcnow)
@@ -85,26 +89,30 @@ class GoogleTrendsTimeseries(Base):
 
 
 # =====================================================
-# Upload history
+# 🔥 Upload history (FINAL DESIGN)
 # =====================================================
 class GoogleTrendsUpload(Base):
     __tablename__ = "google_trends_uploads"
 
     id = Column(Integer, primary_key=True)
 
-    keyword_id = Column(Integer, ForeignKey("google_trends_keywords.id"), nullable=False)
+    # 🔥 SAME ID used in timeseries
+    upload_id = Column(BigInteger, index=True)
+
     country_id = Column(Integer, ForeignKey("countries.id"), nullable=False)
+
+    # 🔥 stores preview of uploaded keywords
+    keywords = Column(String)
 
     rows_inserted = Column(Integer, nullable=False)
 
     uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    keyword = relationship("GoogleTrendsKeyword")
-    country = relationship("Country")
+    country = relationship("Country", back_populates="uploads")
 
 
 # =====================================================
-# Disease Risk
+# Disease Risk (FINAL OUTPUT TABLE)
 # =====================================================
 class DiseaseRisk(Base):
     __tablename__ = "disease_risk"

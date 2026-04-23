@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from datetime import date
 
 from app.utils.database import SessionLocal
-
-# ✅ NEW ENGINE
 from app.services.risk_scoring_service import compute_disease_risk
 
-router = APIRouter(prefix="/api/ranking", tags=["ranking"])
+router = APIRouter(tags=["ranking"])
 
 
 # -------------------------------------------------
@@ -21,46 +20,68 @@ def get_db():
 
 
 # -------------------------------------------------
-# 🔥 GET DISEASE RANKING (NEW LOGIC)
+# 🔥 GET DISEASE RANKING (NOW DATE-AWARE)
 # -------------------------------------------------
 @router.get("/diseases")
-def get_disease_ranking(db: Session = Depends(get_db)):
+def get_disease_ranking(
+    date_param: str | None = Query(
+        default=None,
+        alias="date",
+        description="Date in format YYYY-MM-DD"
+    ),
+    db: Session = Depends(get_db),
+):
     """
-    Returns LIVE computed disease ranking using:
-    - multi-upload data
-    - normalization
-    - weighted scoring
+    Returns LIVE computed disease ranking
+    Supports optional date filtering
     """
 
-    # -------------------------------------------------
-    # 🔥 STEP 1: COMPUTE (NO DB DEPENDENCY)
-    # -------------------------------------------------
-    results = compute_disease_risk(db)
+    try:
+        # -------------------------------------------------
+        # 🔥 PARSE DATE
+        # -------------------------------------------------
+        analysis_date: date | None = None
 
-    if not results:
-        print("⚠️ No results from compute_disease_risk")
+        if date_param:
+            try:
+                analysis_date = date.fromisoformat(date_param)
+            except ValueError:
+                print(f"⚠️ Invalid date format: {date_param}")
+                return []
+
+        # -------------------------------------------------
+        # 🔥 COMPUTE WITH DATE
+        # -------------------------------------------------
+        results = compute_disease_risk(
+            db,
+            end_date=analysis_date
+        )
+
+        if not results:
+            print("⚠️ No results from compute_disease_risk")
+            return []
+
+        # -------------------------------------------------
+        # SORT (HIGH → LOW)
+        # -------------------------------------------------
+        results = sorted(results, key=lambda x: x["score"], reverse=True)
+
+        # -------------------------------------------------
+        # FORMAT RESPONSE
+        # -------------------------------------------------
+        response = [
+            {
+                "disease": r.get("disease", "Unknown"),
+                "risk_score": round(float(r.get("score", 0)), 3),
+                "risk_level": r.get("risk_level", "Unknown"),
+            }
+            for r in results
+        ]
+
+        print("🔥 RANKING API RESPONSE:", response)
+
+        return response
+
+    except Exception as e:
+        print("❌ ERROR in ranking API:", str(e))
         return []
-
-    # -------------------------------------------------
-    # 🔥 STEP 2: SORT (HIGH → LOW)
-    # -------------------------------------------------
-    results = sorted(results, key=lambda x: x["score"], reverse=True)
-
-    # -------------------------------------------------
-    # 🔥 STEP 3: FORMAT RESPONSE
-    # -------------------------------------------------
-    response = [
-        {
-            "disease": r["disease"],
-            "risk_score": round(float(r["score"]), 3),  # ✅ clean output
-            "risk_level": r["risk_level"],
-        }
-        for r in results
-    ]
-
-    # -------------------------------------------------
-    # DEBUG LOG
-    # -------------------------------------------------
-    print("🔥 RANKING API RESPONSE (NEW ENGINE):", response)
-
-    return response

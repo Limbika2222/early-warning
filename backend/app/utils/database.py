@@ -48,3 +48,22 @@ SessionLocal = sessionmaker(
 # Base
 # -------------------------------------------------
 Base = declarative_base()
+
+
+# =================================================
+# 🔥 AUTO-CREATE TABLES (CRITICAL FIX)
+# =================================================
+def init_db():
+    """
+    Import all models and create tables
+    """
+    import app.models.google_trends  # 🔥 IMPORTANT (register models)
+
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created")
+
+
+# -------------------------------------------------
+# 🔥 RUN ON STARTUP
+# -------------------------------------------------
+init_db()
