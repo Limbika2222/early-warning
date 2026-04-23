@@ -119,8 +119,17 @@ export default function NewDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
+        // 🔥 BUILD DATE PARAM
+        let endDate = ""
+        if (dateRange) {
+          endDate = formatDate(dateRange[1])
+        }
+
+        // -------------------------------------------------
+        // SIGNAL API
+        // -------------------------------------------------
         const res = await fetch(
-          `${import.meta.env.VITE_API_BASE}/api/signal?source=google&disease_id=1&country_id=1`
+          `${import.meta.env.VITE_API_BASE}/api/signal?source=google&disease_id=1&country_id=1&end_date=${endDate}`
         )
 
         const json: ApiResponse = await res.json()
@@ -144,7 +153,7 @@ export default function NewDashboard() {
               d.interest > 0
           )
 
-        // DATE FILTER
+        // DATE FILTER (frontend)
         if (dateRange) {
           const [start, end] = dateRange
           transformed = transformed.filter(
@@ -160,7 +169,9 @@ export default function NewDashboard() {
         setSpikeCount(json.metrics.spike_count)
         setRiskLevel(json.metrics.risk_level)
 
+        // -------------------------------------------------
         // TOP SYMPTOMS
+        // -------------------------------------------------
         const totals: Record<string, number> = {}
 
         transformed.forEach((d) => {
@@ -174,9 +185,11 @@ export default function NewDashboard() {
 
         setTopSymptoms(top)
 
-        // RANKING
+        // -------------------------------------------------
+        // 🔥 RANKING API (FIXED)
+        // -------------------------------------------------
         const rankingRes = await fetch(
-          `${import.meta.env.VITE_API_BASE}/api/ranking/diseases`
+          `${import.meta.env.VITE_API_BASE}/api/ranking/diseases?end_date=${endDate}`
         )
 
         const rankingData: RankingItem[] = await rankingRes.json()
@@ -187,6 +200,7 @@ export default function NewDashboard() {
             value: r.risk_score,
           }))
         )
+
       } catch (err) {
         console.error("🔥 LOAD ERROR:", err)
       }
@@ -233,7 +247,7 @@ export default function NewDashboard() {
   return (
     <div className="bg-[#F8FAFC] min-h-screen p-6 grid grid-cols-12 gap-6">
 
-      {/* LEFT SIDE */}
+      {/* LEFT */}
       <div className="col-span-12 lg:col-span-9 space-y-6">
 
         <h1 className="text-xl font-semibold">Infodemiology Dashboard</h1>
@@ -259,12 +273,7 @@ export default function NewDashboard() {
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={symptomTimeSeries}>
                 <CartesianGrid stroke="#E5E7EB" />
-                <XAxis
-                  dataKey="date"
-                  angle={-35}
-                  textAnchor="end"
-                  height={60}
-                />
+                <XAxis dataKey="date" angle={-35} textAnchor="end" height={60} />
                 <YAxis />
                 <Tooltip />
 
@@ -275,7 +284,7 @@ export default function NewDashboard() {
             </ResponsiveContainer>
           </div>
 
-          {/* DISTRIBUTION FIXED */}
+          {/* DISTRIBUTION */}
           <div className="bg-white p-4 rounded-2xl">
             <h2 className="text-sm mb-2">Symptom Distribution</h2>
 
@@ -285,8 +294,7 @@ export default function NewDashboard() {
 
                 <XAxis
                   dataKey="name"
-                  interval={0}            // 🔥 SHOW ALL LABELS
-                  minTickGap={0}         // 🔥 NO AUTO HIDE
+                  interval={0}
                   angle={-40}
                   textAnchor="end"
                   height={80}
@@ -303,7 +311,7 @@ export default function NewDashboard() {
         </div>
       </div>
 
-      {/* RIGHT SIDE */}
+      {/* RIGHT */}
       <div className="col-span-12 lg:col-span-3 bg-white p-4 rounded-2xl space-y-3">
         <Calendar
           selectRange
