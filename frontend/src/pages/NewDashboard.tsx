@@ -24,6 +24,8 @@ import {
 
 // ---------------- TYPES ----------------
 
+type DataSource = "google" | "reddit" | "who"
+
 interface ApiTrendPoint {
   date: string
   value?: number
@@ -99,6 +101,8 @@ function Donut({
 
 // ---------------- COMPONENT ----------------
 export default function NewDashboard() {
+  const [source, setSource] = useState<DataSource>("google")
+
   const [data, setData] = useState<TrendData[]>([])
   const [ranking, setRanking] = useState<{ name: string; value: number }[]>([])
 
@@ -110,7 +114,6 @@ export default function NewDashboard() {
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
 
   const formatDate = (d: Date) => d.toISOString().split("T")[0]
-
   const handleReset = () => setDateRange(null)
 
   // -------------------------------------------------
@@ -119,23 +122,38 @@ export default function NewDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
-        // 🔥 BUILD DATE PARAM
-        let endDate = ""
-        if (dateRange) {
-          endDate = formatDate(dateRange[1])
+        let endDate = dateRange ? formatDate(dateRange[1]) : ""
+
+        // 🔥 SOURCE SWITCH
+        let url = ""
+
+        if (source === "google") {
+          url = `${import.meta.env.VITE_API_BASE}/api/signal?source=google&disease_id=1&country_id=1&end_date=${endDate}`
         }
 
-        // -------------------------------------------------
-        // SIGNAL API
-        // -------------------------------------------------
-        const res = await fetch(
-          `${import.meta.env.VITE_API_BASE}/api/signal?source=google&disease_id=1&country_id=1&end_date=${endDate}`
-        )
+        if (source === "reddit") {
+          url = `${import.meta.env.VITE_API_BASE}/api/reddit/symptoms`
+        }
 
-        const json: ApiResponse = await res.json()
+        if (source === "who") {
+          url = `${import.meta.env.VITE_API_BASE}/api/who`
+        }
 
-        let transformed: TrendData[] = (json.trend_data || [])
-          .map((d) => {
+        const res = await fetch(url)
+        const json = await res.json()
+
+        // 🔥 HANDLE DATA
+        let transformed: TrendData[] = []
+
+        if (source === "reddit") {
+          transformed = Object.entries(json.data || {}).map(([symptom, value]) => ({
+            date: "now",
+            symptom,
+            interest: Number(value),
+            is_spike: false,
+          }))
+        } else {
+          transformed = (json.trend_data || []).map((d: ApiTrendPoint) => {
             const value = d.value ?? d.interest ?? 0
 
             return {
@@ -145,16 +163,19 @@ export default function NewDashboard() {
               is_spike: d.is_spike ?? false,
             }
           })
-          .filter(
-            (d) =>
-              d.symptom &&
-              d.symptom !== "other" &&
-              d.symptom.length > 2 &&
-              d.interest > 0
-          )
+        }
+
+        // FILTER
+        transformed = transformed.filter(
+          (d) =>
+            d.symptom &&
+            d.symptom !== "other" &&
+            d.symptom.length > 2 &&
+            d.interest > 0
+        )
 
         // DATE FILTER (frontend)
-        if (dateRange) {
+        if (dateRange && source === "google") {
           const [start, end] = dateRange
           transformed = transformed.filter(
             (d) =>
@@ -165,13 +186,13 @@ export default function NewDashboard() {
 
         setData(transformed)
 
-        setSignalIndex(json.metrics.signal_index)
-        setSpikeCount(json.metrics.spike_count)
-        setRiskLevel(json.metrics.risk_level)
+        if (json.metrics) {
+          setSignalIndex(json.metrics.signal_index)
+          setSpikeCount(json.metrics.spike_count)
+          setRiskLevel(json.metrics.risk_level)
+        }
 
-        // -------------------------------------------------
         // TOP SYMPTOMS
-        // -------------------------------------------------
         const totals: Record<string, number> = {}
 
         transformed.forEach((d) => {
@@ -185,21 +206,21 @@ export default function NewDashboard() {
 
         setTopSymptoms(top)
 
-        // -------------------------------------------------
-        // 🔥 RANKING API (FIXED)
-        // -------------------------------------------------
-        const rankingRes = await fetch(
-          `${import.meta.env.VITE_API_BASE}/api/ranking/diseases?end_date=${endDate}`
-        )
+        // 🔥 RANKING ONLY FOR GOOGLE
+        if (source === "google") {
+          const rankingRes = await fetch(
+            `${import.meta.env.VITE_API_BASE}/api/ranking/diseases?end_date=${endDate}`
+          )
 
-        const rankingData: RankingItem[] = await rankingRes.json()
+          const rankingData: RankingItem[] = await rankingRes.json()
 
-        setRanking(
-          rankingData.map((r) => ({
-            name: r.disease,
-            value: r.risk_score,
-          }))
-        )
+          setRanking(
+            rankingData.map((r) => ({
+              name: r.disease,
+              value: r.risk_score,
+            }))
+          )
+        }
 
       } catch (err) {
         console.error("🔥 LOAD ERROR:", err)
@@ -207,7 +228,7 @@ export default function NewDashboard() {
     }
 
     load()
-  }, [dateRange])
+  }, [dateRange, source])
 
   // ---------------- TIME SERIES ----------------
   const symptomTimeSeries: TimeSeriesRow[] = Object.values(
@@ -251,6 +272,27 @@ export default function NewDashboard() {
       <div className="col-span-12 lg:col-span-9 space-y-6">
 
         <h1 className="text-xl font-semibold">Infodemiology Dashboard</h1>
+
+        {/* 🔥 SOURCE SWITCH */}
+        <div className="flex gap-2 mt-2">
+          {["google", "reddit", "who"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setSource(s as DataSource)}
+              className={`px-3 py-1 rounded-lg text-sm transition ${
+                source === s
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {s === "google"
+                ? "Google Trends"
+                : s === "reddit"
+                ? "Reddit"
+                : "WHO"}
+            </button>
+          ))}
+        </div>
 
         {/* METRICS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
