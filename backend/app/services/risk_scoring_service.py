@@ -8,6 +8,10 @@ from app.models.google_trends import (
     DiseaseRisk,
 )
 
+# 🔥 IMPORTANT: USE NORMALIZER
+from app.services.symptom_normalizer import normalize_symptom
+
+
 # -------------------------------------------------
 # DISEASE → SYMPTOMS + WEIGHTS
 # -------------------------------------------------
@@ -49,11 +53,12 @@ DISEASE_SYMPTOMS = {
     },
 }
 
+
 # -------------------------------------------------
-# KEYWORD → DISEASE MATCH
+# 🔥 MAP USING NORMALIZED SYMPTOMS
 # -------------------------------------------------
 def map_keyword(keyword: str):
-    keyword = keyword.lower()
+    keyword = normalize_symptom(keyword)
     matches = []
 
     for disease, symptoms in DISEASE_SYMPTOMS.items():
@@ -66,7 +71,7 @@ def map_keyword(keyword: str):
 
 
 # -------------------------------------------------
-# 🔥 MAIN FUNCTION (FIXED)
+# 🔥 MAIN FUNCTION (FINAL)
 # -------------------------------------------------
 def compute_disease_risk(
     db: Session,
@@ -76,22 +81,22 @@ def compute_disease_risk(
     print("🚀 Starting disease risk computation...")
 
     # -------------------------------------------------
-    # 🔥 STEP 1: FIND REAL MAX DATE IN DB
+    # STEP 1: FIND MAX DATE
     # -------------------------------------------------
-    max_date = db.query(
+    max_date_row = db.query(
         GoogleTrendsTimeseries.date
     ).order_by(
         GoogleTrendsTimeseries.date.desc()
     ).first()
 
-    if not max_date:
+    if not max_date_row:
         print("❌ No data in DB")
         return []
 
-    max_date = max_date[0]
+    max_date = max_date_row[0]
 
     # -------------------------------------------------
-    # 🔥 STEP 2: USE SAFE END DATE
+    # STEP 2: SAFE DATE HANDLING
     # -------------------------------------------------
     if end_date is None or end_date > max_date:
         end_date = max_date
@@ -101,7 +106,7 @@ def compute_disease_risk(
     print(f"📅 Using window: {start_date} → {end_date}")
 
     # -------------------------------------------------
-    # 🔥 STEP 3: FETCH DATA
+    # STEP 3: FETCH FILTERED DATA
     # -------------------------------------------------
     rows = (
         db.query(
@@ -120,7 +125,7 @@ def compute_disease_risk(
     )
 
     # -------------------------------------------------
-    # 🔥 FALLBACK IF TOO SMALL
+    # 🔥 FALLBACK IF TOO LITTLE DATA
     # -------------------------------------------------
     if len(rows) < 20:
         print("⚠️ Sparse data → expanding window")
@@ -142,12 +147,13 @@ def compute_disease_risk(
         return []
 
     # -------------------------------------------------
-    # BUILD DATA
+    # STEP 4: BUILD DATASET
     # -------------------------------------------------
     data = []
 
     for ts, kw in rows:
-        keyword = kw.keyword_text.lower().strip()
+        keyword = normalize_symptom(kw.keyword_text)
+
         matches = map_keyword(keyword)
 
         for disease, weight in matches:
@@ -168,7 +174,7 @@ def compute_disease_risk(
     df["date"] = pd.to_datetime(df["date"])
 
     # -------------------------------------------------
-    # 🔥 FIX NORMALIZATION (CRITICAL)
+    # 🔥 NORMALIZATION (SAFE)
     # -------------------------------------------------
     def safe_normalize(x):
         if x.max() == x.min():
@@ -178,9 +184,21 @@ def compute_disease_risk(
     df["normalized"] = df.groupby("keyword")["interest"].transform(safe_normalize)
 
     # -------------------------------------------------
-    # WEIGHTED SCORE
+    # 🔥 TREND BOOST (NEW — makes ranking dynamic)
     # -------------------------------------------------
-    df["weighted_score"] = df["normalized"] * df["weight"]
+    df["trend"] = df.groupby("keyword")["interest"].transform(
+        lambda x: x.iloc[-1] - x.iloc[0] if len(x) > 1 else 0
+    )
+
+    df["trend_boost"] = df["trend"].clip(lower=0)
+
+    # -------------------------------------------------
+    # FINAL SCORE
+    # -------------------------------------------------
+    df["weighted_score"] = (
+        df["normalized"] * df["weight"]
+        + 0.3 * df["trend_boost"]   # 🔥 makes ranking responsive
+    )
 
     disease_scores = (
         df.groupby("disease")["weighted_score"]
@@ -188,17 +206,20 @@ def compute_disease_risk(
         .reset_index()
     )
 
+    # -------------------------------------------------
+    # BUILD RESPONSE
+    # -------------------------------------------------
     results = []
 
     for _, row in disease_scores.iterrows():
-        score = row["weighted_score"]
+        score = float(row["weighted_score"])
 
         results.append({
             "disease": row["disease"],
             "score": round(score, 3),
             "risk_level": (
-                "HIGH" if score >= 3.5 else
-                "MEDIUM" if score >= 1.5 else
+                "HIGH" if score >= 4 else
+                "MEDIUM" if score >= 2 else
                 "LOW"
             ),
         })

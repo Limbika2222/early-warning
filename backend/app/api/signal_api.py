@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Query
 from collections import defaultdict
 from typing import Optional
-import re
 
 from app.services.google_trends_store import (
     fetch_google_trends_by_keyword,
     fetch_keywords_for_disease,
 )
 from app.services.analytics_service import analyze_trends
+
+# 🔥 USE YOUR NEW NORMALIZER
+from app.services.symptom_normalizer import normalize_symptom
 
 from app.utils.database import SessionLocal
 from app.models.google_trends import (
@@ -20,33 +22,6 @@ router = APIRouter(tags=["Signal Analytics"])
 
 
 # ==========================================================
-# 🔥 CLEAN KEYWORD (FINAL VERSION)
-# ==========================================================
-def normalize_keyword(keyword: str) -> str:
-    if not keyword:
-        return ""
-
-    keyword = keyword.lower().strip()
-
-    # 🔥 REMOVE DUPLICATES (.1, .2, etc)
-    keyword = re.sub(r"\.\d+$", "", keyword)
-
-    # remove noise
-    keyword = keyword.replace("-", " ")
-    keyword = keyword.replace("_", " ")
-
-    keyword = keyword.replace("symptoms of", "")
-    keyword = keyword.replace("symptom of", "")
-
-    keyword = keyword.replace("influenza-like illness", "flu")
-    keyword = keyword.replace("covid-19", "covid")
-
-    keyword = re.sub(r"\s+", " ", keyword)
-
-    return keyword.strip()
-
-
-# ==========================================================
 # 🔥 SAFE VALUE EXTRACTION
 # ==========================================================
 def get_value(row):
@@ -54,7 +29,7 @@ def get_value(row):
 
 
 # ==========================================================
-# 🔥 SYMPTOM SIGNAL API (FIXED)
+# 🔥 SIGNAL API (FINAL FIXED VERSION)
 # ==========================================================
 @router.get("/signal")
 def get_signal(
@@ -91,13 +66,15 @@ def get_signal(
     # MAIN LOOP
     # -------------------------------------------------
     for keyword in keywords:
-        clean_keyword = normalize_keyword(keyword)
 
-        # 🔥 SKIP BAD KEYWORDS
-        if not clean_keyword or len(clean_keyword) < 2:
+        # 🔥 NORMALIZE USING NEW SYSTEM
+        normalized = normalize_symptom(keyword)
+
+        # skip junk
+        if not normalized or len(normalized) < 2:
             continue
 
-        print(f"👉 RAW: {keyword} → CLEAN: {clean_keyword}")
+        print(f"👉 RAW: {keyword} → NORMALIZED: {normalized}")
 
         data = fetch_google_trends_by_keyword(
             keyword=keyword,
@@ -112,7 +89,7 @@ def get_signal(
         values = [get_value(row) for row in data]
         dates = [row["date"] for row in data]
 
-        # 🔥 skip empty series
+        # skip empty series
         if not any(values):
             continue
 
@@ -124,7 +101,7 @@ def get_signal(
             trend_data.append(
                 {
                     "date": point["date"],
-                    "symptom": clean_keyword,   # ✅ CRITICAL FIX
+                    "symptom": normalized,   # ✅ CLEAN + STANDARDIZED
                     "value": val,
                     "interest": val,
                     "ewma": point.get("ewma"),

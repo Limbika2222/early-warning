@@ -20,34 +20,44 @@ def get_db():
 
 
 # -------------------------------------------------
-# 🔥 GET DISEASE RANKING (NOW DATE-AWARE)
+# 🔥 GET DISEASE RANKING (DATE-AWARE FIXED)
 # -------------------------------------------------
 @router.get("/diseases")
 def get_disease_ranking(
     date_param: str | None = Query(
         default=None,
         alias="date",
-        description="Date in format YYYY-MM-DD"
+        description="Preferred date param (YYYY-MM-DD)"
+    ),
+    end_date: str | None = Query(
+        default=None,
+        description="Alternative param for frontend compatibility"
     ),
     db: Session = Depends(get_db),
 ):
     """
     Returns LIVE computed disease ranking
-    Supports optional date filtering
+    Supports:
+    - ?date=YYYY-MM-DD
+    - ?end_date=YYYY-MM-DD
     """
 
     try:
         # -------------------------------------------------
-        # 🔥 PARSE DATE
+        # 🔥 PICK DATE (PRIORITY LOGIC)
         # -------------------------------------------------
+        selected_date_str = date_param or end_date
+
         analysis_date: date | None = None
 
-        if date_param:
+        if selected_date_str:
             try:
-                analysis_date = date.fromisoformat(date_param)
+                analysis_date = date.fromisoformat(selected_date_str)
             except ValueError:
-                print(f"⚠️ Invalid date format: {date_param}")
+                print(f"⚠️ Invalid date format: {selected_date_str}")
                 return []
+
+        print(f"📅 RANKING USING DATE: {analysis_date}")
 
         # -------------------------------------------------
         # 🔥 COMPUTE WITH DATE
@@ -62,7 +72,7 @@ def get_disease_ranking(
             return []
 
         # -------------------------------------------------
-        # SORT (HIGH → LOW)
+        # SORT
         # -------------------------------------------------
         results = sorted(results, key=lambda x: x["score"], reverse=True)
 
