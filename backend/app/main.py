@@ -11,12 +11,15 @@ from app.api.analysis_api import router as analysis_router
 from app.api.alert_api import router as alert_router
 from app.api.ranking_api import router as ranking_router
 
+# ✅ NEW: Reddit Signal API
+from app.api.reddit_signal_api import router as reddit_router
+
 # -------------------------------------------------
 # Create FastAPI Application
 # -------------------------------------------------
 app = FastAPI(
     title="Infodemiology Early Warning System API",
-    version="2.4.0",
+    version="2.5.0",  # 🔥 bump version
 )
 
 # -------------------------------------------------
@@ -31,7 +34,7 @@ app.add_middleware(
 )
 
 # -------------------------------------------------
-# Register Routers (FIXED)
+# Register Routers
 # -------------------------------------------------
 
 # Upload (CSV, history)
@@ -48,11 +51,18 @@ app.include_router(
     tags=["Trends"]
 )
 
-# ✅ FIXED SIGNAL ROUTE (IMPORTANT)
+# Google Signal (existing)
 app.include_router(
     signal_api.router,
-    prefix="/api",   # 🔥 FIX HERE
+    prefix="/api",
     tags=["Signal"]
+)
+
+# ✅ Reddit Signal (NEW)
+app.include_router(
+    reddit_router,
+    prefix="/api",
+    tags=["Reddit"]
 )
 
 # Analysis
