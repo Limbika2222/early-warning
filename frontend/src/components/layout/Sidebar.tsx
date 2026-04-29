@@ -8,10 +8,20 @@ import {
   FileText,
   Settings,
   BookOpen,
+  Globe,        // 🔥 NEW (WHO)
+  MessageCircle // 🔥 NEW (Reddit)
 } from "lucide-react"
 
+// -------------------------------------------------
+// MENU CONFIG (UPDATED)
+// -------------------------------------------------
 const menu = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+
+  // 🔥 NEW DATA SOURCES SECTION
+  { label: "Reddit Signals", icon: MessageCircle, path: "/reddit-dashboard" },
+  { label: "WHO Data", icon: Globe, path: "/who-dashboard" },
+
   { label: "Upload Data", icon: Upload, path: "/upload" },
   { label: "Predictions", icon: Activity, path: "/predictions" },
   { label: "Alerts & Anomalies", icon: AlertTriangle, path: "/alerts" },
@@ -20,6 +30,9 @@ const menu = [
   { label: "Documentation", icon: BookOpen, path: "/docs" },
 ]
 
+// -------------------------------------------------
+// COMPONENT
+// -------------------------------------------------
 export default function Sidebar() {
   return (
     <aside
@@ -88,7 +101,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-6 py-5 border-t border-white/40 text-xs text-[#3b6b6f]">
-        Limbika-IIC · v1.0 · 2026
+        Limbika-Shonith-IIC · v1.0 · 2026
       </div>
     </aside>
   )

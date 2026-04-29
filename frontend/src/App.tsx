@@ -1,3 +1,5 @@
+"use client"
+
 import { useEffect, useState } from "react"
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom"
 import { onAuthStateChanged } from "firebase/auth"
@@ -10,7 +12,10 @@ import AppLayout from "./components/layout/AppLayout"
 import Login from "./pages/Login"
 import UploadData from "./pages/UploadData"
 import NewDashboard from "./pages/NewDashboard"
-import WhoDashboard from "./pages/WhoDashboard" // ✅ ADDED
+import WhoDashboard from "./pages/WhoDashboard"
+
+// 🔥 NEW
+import RedditDashboard from "./pages/RedditDashboard"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -43,17 +48,19 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        {/* Public Route */}
+
+        {/* ---------------- PUBLIC ---------------- */}
         <Route
           path="/login"
           element={user ? <Navigate to="/" /> : <Login />}
         />
 
-        {/* Protected Layout */}
+        {/* ---------------- PROTECTED ---------------- */}
         <Route
           element={user ? <AppLayout /> : <Navigate to="/login" />}
         >
-          {/* Google Dashboard */}
+
+          {/* 🟢 GOOGLE DASHBOARD */}
           <Route
             path="/"
             element={
@@ -63,7 +70,17 @@ export default function App() {
             }
           />
 
-          {/* ✅ WHO DASHBOARD (ADDED) */}
+          {/* 🔵 REDDIT DASHBOARD (NEW) */}
+          <Route
+            path="/reddit-dashboard"
+            element={
+              <DashboardProvider>
+                <RedditDashboard />
+              </DashboardProvider>
+            }
+          />
+
+          {/* 🟣 WHO DASHBOARD */}
           <Route
             path="/who-dashboard"
             element={
@@ -73,12 +90,14 @@ export default function App() {
             }
           />
 
-          {/* Upload */}
+          {/* 📤 UPLOAD */}
           <Route path="/upload" element={<UploadData />} />
+
         </Route>
 
-        {/* Catch-all */}
+        {/* ---------------- FALLBACK ---------------- */}
         <Route path="*" element={<Navigate to="/" />} />
+
       </Routes>
     </HashRouter>
   )

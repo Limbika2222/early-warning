@@ -5,6 +5,7 @@
 
   packages = [
     pkgs.python311
+    pkgs.python311Packages.requests
     pkgs.nodejs_20
     pkgs.sqlite
     pkgs.stdenv.cc.cc.lib
