@@ -13,8 +13,6 @@ import Login from "./pages/Login"
 import UploadData from "./pages/UploadData"
 import NewDashboard from "./pages/NewDashboard"
 import WhoDashboard from "./pages/WhoDashboard"
-
-// 🔥 NEW
 import RedditDashboard from "./pages/RedditDashboard"
 
 export default function App() {
@@ -60,7 +58,7 @@ export default function App() {
           element={user ? <AppLayout /> : <Navigate to="/login" />}
         >
 
-          {/* 🟢 GOOGLE DASHBOARD */}
+          {/* 🟢 GOOGLE */}
           <Route
             path="/"
             element={
@@ -70,9 +68,9 @@ export default function App() {
             }
           />
 
-          {/* 🔵 REDDIT DASHBOARD (NEW) */}
+          {/* 🔵 REDDIT */}
           <Route
-            path="/reddit-dashboard"
+            path="/reddit"
             element={
               <DashboardProvider>
                 <RedditDashboard />
@@ -80,9 +78,9 @@ export default function App() {
             }
           />
 
-          {/* 🟣 WHO DASHBOARD */}
+          {/* 🟣 WHO */}
           <Route
-            path="/who-dashboard"
+            path="/who"
             element={
               <DashboardProvider>
                 <WhoDashboard />
