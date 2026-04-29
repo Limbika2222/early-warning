@@ -1,3 +1,5 @@
+"use client"
+
 import { NavLink } from "react-router-dom"
 import { motion } from "framer-motion"
 import {
@@ -8,11 +10,23 @@ import {
   FileText,
   Settings,
   BookOpen,
+  Globe,
+  MessageCircle,
 } from "lucide-react"
 
+// -------------------------------------------------
+// ✅ FIXED MENU (MATCHES App.tsx EXACTLY)
+// -------------------------------------------------
 const menu = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+  { label: "Google Dashboard", icon: LayoutDashboard, path: "/" },
+
+  // 🔥 FIXED (must match App.tsx)
+  { label: "Reddit Signals", icon: MessageCircle, path: "/reddit" },
+  { label: "WHO Surveillance", icon: Globe, path: "/who" },
+
   { label: "Upload Data", icon: Upload, path: "/upload" },
+
+  // Optional sections
   { label: "Predictions", icon: Activity, path: "/predictions" },
   { label: "Alerts & Anomalies", icon: AlertTriangle, path: "/alerts" },
   { label: "Reports", icon: FileText, path: "/reports" },
@@ -20,11 +34,14 @@ const menu = [
   { label: "Documentation", icon: BookOpen, path: "/docs" },
 ]
 
+// -------------------------------------------------
+// COMPONENT
+// -------------------------------------------------
 export default function Sidebar() {
   return (
     <aside
       className="
-        w-[250px]
+        w-[260px]
         bg-white/30
         backdrop-blur-xl
         border-r border-white/40
@@ -32,7 +49,7 @@ export default function Sidebar() {
         shadow-lg
       "
     >
-      {/* Logo Section */}
+      {/* 🔹 Logo */}
       <div className="px-8 py-6 border-b border-white/40">
         <h1 className="text-xl font-semibold text-[#1e3f42] tracking-wide">
           Infodemiology
@@ -42,13 +59,17 @@ export default function Sidebar() {
         </p>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
+      {/* 🔹 Navigation */}
+      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
         {menu.map((item) => {
           const Icon = item.icon
 
           return (
-            <NavLink key={item.label} to={item.path}>
+            <NavLink
+              key={item.label}
+              to={item.path}
+              end={item.path === "/"} // exact match for root
+            >
               {({ isActive }) => (
                 <motion.div
                   whileHover={{ x: 6 }}
@@ -58,12 +79,12 @@ export default function Sidebar() {
                     text-sm font-medium transition-all duration-300
                     ${
                       isActive
-                        ? "bg-white/70 text-[#1f9c94] shadow-md"
+                        ? "bg-white/80 text-[#1f9c94] shadow-md"
                         : "text-[#1e3f42] hover:bg-white/50"
                     }
                   `}
                 >
-                  {/* Active accent bar */}
+                  {/* Active indicator */}
                   {isActive && (
                     <motion.div
                       layoutId="activeSidebarIndicator"
@@ -71,6 +92,7 @@ export default function Sidebar() {
                     />
                   )}
 
+                  {/* Icon */}
                   <Icon
                     size={18}
                     className={`transition-transform duration-200 ${
@@ -78,6 +100,7 @@ export default function Sidebar() {
                     }`}
                   />
 
+                  {/* Label */}
                   <span>{item.label}</span>
                 </motion.div>
               )}
@@ -86,9 +109,9 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* 🔹 Footer */}
       <div className="px-6 py-5 border-t border-white/40 text-xs text-[#3b6b6f]">
-        Limbika-IIC · v1.0 · 2026
+        Limbika–Shonith IIC · v1.0 · 2026
       </div>
     </aside>
   )

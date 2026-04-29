@@ -34,12 +34,17 @@ interface ApiTrendPoint {
   is_spike?: boolean
 }
 
-interface ApiResponse {
-  trend_data: ApiTrendPoint[]
-  metrics: {
+interface RedditTimeSeries {
+  date: string
+  symptom: string
+  count: number
+}
+
+interface RedditResponse {
+  time_series: RedditTimeSeries[]
+  metrics?: {
     signal_index: number
-    spike_count: number
-    risk_level: string
+    alerts: number
   }
 }
 
@@ -55,7 +60,6 @@ interface TrendData {
 interface RankingItem {
   disease: string
   risk_score: number
-  risk_level: string
 }
 
 interface TimeSeriesRow {
@@ -122,9 +126,8 @@ export default function NewDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
-        let endDate = dateRange ? formatDate(dateRange[1]) : ""
+        const endDate = dateRange ? formatDate(dateRange[1]) : ""
 
-        // 🔥 SOURCE SWITCH
         let url = ""
 
         if (source === "google") {
@@ -132,7 +135,7 @@ export default function NewDashboard() {
         }
 
         if (source === "reddit") {
-          url = `${import.meta.env.VITE_API_BASE}/api/reddit/symptoms`
+          url = `${import.meta.env.VITE_API_BASE}/api/reddit/signal`
         }
 
         if (source === "who") {
@@ -142,17 +145,28 @@ export default function NewDashboard() {
         const res = await fetch(url)
         const json = await res.json()
 
-        // 🔥 HANDLE DATA
         let transformed: TrendData[] = []
 
+        // ---------------- REDDIT ----------------
         if (source === "reddit") {
-          transformed = Object.entries(json.data || {}).map(([symptom, value]) => ({
-            date: "now",
-            symptom,
-            interest: Number(value),
+          const reddit: RedditResponse = json
+
+          transformed = (reddit.time_series || []).map((d) => ({
+            date: d.date,
+            symptom: d.symptom,
+            interest: d.count,
             is_spike: false,
           }))
-        } else {
+
+          if (reddit.metrics) {
+            setSignalIndex(reddit.metrics.signal_index)
+            setSpikeCount(reddit.metrics.alerts)
+            setRiskLevel("MEDIUM")
+          }
+        }
+
+        // ---------------- GOOGLE / WHO ----------------
+        else {
           transformed = (json.trend_data || []).map((d: ApiTrendPoint) => {
             const value = d.value ?? d.interest ?? 0
 
@@ -163,6 +177,12 @@ export default function NewDashboard() {
               is_spike: d.is_spike ?? false,
             }
           })
+
+          if (json.metrics) {
+            setSignalIndex(json.metrics.signal_index)
+            setSpikeCount(json.metrics.spike_count)
+            setRiskLevel(json.metrics.risk_level)
+          }
         }
 
         // FILTER
@@ -171,10 +191,10 @@ export default function NewDashboard() {
             d.symptom &&
             d.symptom !== "other" &&
             d.symptom.length > 2 &&
-            d.interest > 0
+            d.interest >= 0
         )
 
-        // DATE FILTER (frontend)
+        // DATE FILTER
         if (dateRange && source === "google") {
           const [start, end] = dateRange
           transformed = transformed.filter(
@@ -186,13 +206,7 @@ export default function NewDashboard() {
 
         setData(transformed)
 
-        if (json.metrics) {
-          setSignalIndex(json.metrics.signal_index)
-          setSpikeCount(json.metrics.spike_count)
-          setRiskLevel(json.metrics.risk_level)
-        }
-
-        // TOP SYMPTOMS
+        // ---------------- TOP SYMPTOMS ----------------
         const totals: Record<string, number> = {}
 
         transformed.forEach((d) => {
@@ -206,7 +220,7 @@ export default function NewDashboard() {
 
         setTopSymptoms(top)
 
-        // 🔥 RANKING ONLY FOR GOOGLE
+        // ---------------- RANKING ----------------
         if (source === "google") {
           const rankingRes = await fetch(
             `${import.meta.env.VITE_API_BASE}/api/ranking/diseases?end_date=${endDate}`
@@ -220,6 +234,8 @@ export default function NewDashboard() {
               value: r.risk_score,
             }))
           )
+        } else {
+          setRanking([])
         }
 
       } catch (err) {
@@ -273,23 +289,19 @@ export default function NewDashboard() {
 
         <h1 className="text-xl font-semibold">Infodemiology Dashboard</h1>
 
-        {/* 🔥 SOURCE SWITCH */}
-        <div className="flex gap-2 mt-2">
+        {/* SOURCE SWITCH */}
+        <div className="flex gap-2 bg-white p-1 rounded-xl shadow-sm w-fit">
           {["google", "reddit", "who"].map((s) => (
             <button
               key={s}
               onClick={() => setSource(s as DataSource)}
-              className={`px-3 py-1 rounded-lg text-sm transition ${
+              className={`px-4 py-2 rounded-lg ${
                 source === s
                   ? "bg-indigo-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  : "text-gray-500 hover:bg-gray-100"
               }`}
             >
-              {s === "google"
-                ? "Google Trends"
-                : s === "reddit"
-                ? "Reddit"
-                : "WHO"}
+              {s}
             </button>
           ))}
         </div>
@@ -303,22 +315,19 @@ export default function NewDashboard() {
         </div>
 
         {/* RANKING */}
-        <DiseaseRankingBar data={ranking} />
+        {source === "google" && <DiseaseRankingBar data={ranking} />}
 
         {/* CHARTS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* TIME SERIES */}
           <div className="bg-white p-4 rounded-2xl">
-            <h2 className="text-sm mb-2">Top Symptoms Over Time</h2>
-
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={symptomTimeSeries}>
                 <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="date" angle={-35} textAnchor="end" height={60} />
+                <XAxis dataKey="date" />
                 <YAxis />
                 <Tooltip />
-
                 {topSymptoms.map((s) => (
                   <Area key={s} type="monotone" dataKey={s} />
                 ))}
@@ -328,21 +337,10 @@ export default function NewDashboard() {
 
           {/* DISTRIBUTION */}
           <div className="bg-white p-4 rounded-2xl">
-            <h2 className="text-sm mb-2">Symptom Distribution</h2>
-
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={symptomAgg} margin={{ bottom: 80 }}>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={symptomAgg}>
                 <CartesianGrid stroke="#E5E7EB" />
-
-                <XAxis
-                  dataKey="name"
-                  interval={0}
-                  angle={-40}
-                  textAnchor="end"
-                  height={80}
-                  tick={{ fontSize: 10 }}
-                />
-
+                <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="value" fill="#6366F1" />
@@ -365,7 +363,7 @@ export default function NewDashboard() {
           onClick={handleReset}
           className="w-full bg-gray-200 py-2 rounded-xl text-sm"
         >
-          Reset View
+          Reset
         </button>
       </div>
     </div>
