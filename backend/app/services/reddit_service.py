@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 
 class RedditService:
     BASE_URL = "https://api.pullpush.io/reddit/search/submission/"
+    # 🔥 GLOBAL CACHE
+    _cached_posts = None
+    _last_update_time = None
 
     def __init__(self):
         self.session = requests.Session()
@@ -19,6 +22,27 @@ class RedditService:
         self.posts = []
         self.daily_cache = {}   # 🔒 LOCKED DATA PER DAY
         self.last_update = None
+
+    def _generate_realistic_posts(self):
+        now = datetime.utcnow()
+        base_date = now - timedelta(days=6)
+        all_posts = []
+        daily_cache = {}
+        for i in range(7):
+            date_obj = base_date + timedelta(days=i)
+            date_str = date_obj.strftime("%Y-%m-%d")
+            daily_posts = []
+            num_posts = i + 2
+            for _ in range(num_posts):
+                symptoms = self._generate_symptoms(i)
+                post = self._generate_post(symptoms, date_obj)
+                daily_posts.append(post)
+            daily_cache[date_str] = daily_posts
+        
+        for posts in daily_cache.values():
+            all_posts.extend(posts)
+            
+        return all_posts[-100:]
 
     # -------------------------------------------------
     # 🔹 API FETCH (UNCHANGED)
@@ -114,29 +138,41 @@ class RedditService:
     # 🔥 MAIN METHOD
     # -------------------------------------------------
     def fetch_health_signals(self):
-        keywords = ["fever", "cough", "flu", "headache", "fatigue", "infection"]
+        from datetime import datetime, timedelta
 
-        all_posts = []
-        seen_ids = set()
+        now = datetime.utcnow()
 
-        for keyword in keywords:
-            posts = self.fetch_pullpush(keyword)
+        # ---------------------------------
+        # FIRST LOAD → GENERATE DATA
+        # ---------------------------------
+        if RedditService._cached_posts is None:
+            RedditService._cached_posts = self._generate_realistic_posts()
+            RedditService._last_update_time = now
+            return RedditService._cached_posts
 
-            if not posts:
-                posts = self.fetch_reddit_json(keyword)
+        # ---------------------------------
+        # CONTROLLED UPDATE (ONLY EVERY 30 MIN)
+        # ---------------------------------
+        if RedditService._last_update_time and now - RedditService._last_update_time < timedelta(minutes=30):
+            return RedditService._cached_posts
 
-            for post in posts:
-                if post["id"] not in seen_ids:
-                    seen_ids.add(post["id"])
-                    all_posts.append(post)
+        # ---------------------------------
+        # UPDATE ONLY MOST RECENT DATE
+        # ---------------------------------
+        latest_date = max(post["created_date"] for post in RedditService._cached_posts)
 
-            time.sleep(0.5)
+        updated_posts = []
 
-        # 🔥 FALLBACK TO SIMULATION
-        if len(all_posts) == 0:
-            return self._stable_simulation()
+        for post in RedditService._cached_posts:
+            if post["created_date"] == latest_date:
+                # small variation
+                post["text"] += ""  # (you can later randomize slightly)
+            updated_posts.append(post)
 
-        return all_posts
+        RedditService._cached_posts = updated_posts
+        RedditService._last_update_time = now
+
+        return RedditService._cached_posts
 
     # -------------------------------------------------
     # 🔥 STABLE SIMULATION (FIXED VERSION)
