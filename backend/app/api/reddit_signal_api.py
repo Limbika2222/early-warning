@@ -7,6 +7,9 @@ from app.services.symptom_extraction_service import SymptomExtractionService
 from app.services.time_series_service import TimeSeriesService
 from app.services.ewma_service import EWMASignalService
 
+# 🔥 NEW IMPORT (Disease Detection)
+from app.services.disease_detection_service import DiseaseDetectionService
+
 router = APIRouter()
 
 # -------------------------------------------------
@@ -27,6 +30,9 @@ def get_reddit_signal():
     extractor = SymptomExtractionService()
     ts_service = TimeSeriesService()
     ewma_service = EWMASignalService()
+
+    # 🔥 NEW SERVICE
+    disease_service = DiseaseDetectionService()
 
     # -------------------------------------------------
     # Step 1: Fetch posts
@@ -68,7 +74,12 @@ def get_reddit_signal():
         del alert_history[:-50]
 
     # -------------------------------------------------
-    # Step 6: Metrics
+    # 🔥 NEW STEP 6: DISEASE DETECTION
+    # -------------------------------------------------
+    probable_diseases = disease_service.detect_diseases(flattened)
+
+    # -------------------------------------------------
+    # Step 7: Metrics
     # -------------------------------------------------
     total_mentions = sum(item.get("count", 0) for item in flattened)
 
@@ -101,11 +112,11 @@ def get_reddit_signal():
         "active_symptoms": unique_symptoms,
         "alerts": len(alerts),
         "top_symptom": top_symptom,
-        "last_updated": timestamp   # ✅ NEW (for UI)
+        "last_updated": timestamp
     }
 
     # -------------------------------------------------
-    # Step 7: Sample posts (limit for UI)
+    # Step 8: Sample posts (limit for UI)
     # -------------------------------------------------
     sample_posts = filtered_posts[:10]
 
@@ -115,7 +126,10 @@ def get_reddit_signal():
     return {
         "time_series": flattened,
         "alerts": alerts,
-        "alert_history": alert_history,  # ✅ IMPORTANT
+        "alert_history": alert_history,
         "metrics": metrics,
-        "posts": sample_posts
+        "posts": sample_posts,
+
+        # 🔥 NEW OUTPUT
+        "probable_diseases": probable_diseases
     }

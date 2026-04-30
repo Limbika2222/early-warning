@@ -120,9 +120,6 @@ export default function NewDashboard() {
   const formatDate = (d: Date) => d.toISOString().split("T")[0]
   const handleReset = () => setDateRange(null)
 
-  // -------------------------------------------------
-  // LOAD DATA
-  // -------------------------------------------------
   useEffect(() => {
     const load = async () => {
       try {
@@ -147,7 +144,6 @@ export default function NewDashboard() {
 
         let transformed: TrendData[] = []
 
-        // ---------------- REDDIT ----------------
         if (source === "reddit") {
           const reddit: RedditResponse = json
 
@@ -163,10 +159,7 @@ export default function NewDashboard() {
             setSpikeCount(reddit.metrics.alerts)
             setRiskLevel("MEDIUM")
           }
-        }
-
-        // ---------------- GOOGLE / WHO ----------------
-        else {
+        } else {
           transformed = (json.trend_data || []).map((d: ApiTrendPoint) => {
             const value = d.value ?? d.interest ?? 0
 
@@ -185,7 +178,6 @@ export default function NewDashboard() {
           }
         }
 
-        // FILTER
         transformed = transformed.filter(
           (d) =>
             d.symptom &&
@@ -194,7 +186,6 @@ export default function NewDashboard() {
             d.interest >= 0
         )
 
-        // DATE FILTER
         if (dateRange && source === "google") {
           const [start, end] = dateRange
           transformed = transformed.filter(
@@ -206,7 +197,6 @@ export default function NewDashboard() {
 
         setData(transformed)
 
-        // ---------------- TOP SYMPTOMS ----------------
         const totals: Record<string, number> = {}
 
         transformed.forEach((d) => {
@@ -220,7 +210,6 @@ export default function NewDashboard() {
 
         setTopSymptoms(top)
 
-        // ---------------- RANKING ----------------
         if (source === "google") {
           const rankingRes = await fetch(
             `${import.meta.env.VITE_API_BASE}/api/ranking/diseases?end_date=${endDate}`
@@ -246,7 +235,6 @@ export default function NewDashboard() {
     load()
   }, [dateRange, source])
 
-  // ---------------- TIME SERIES ----------------
   const symptomTimeSeries: TimeSeriesRow[] = Object.values(
     data.reduce<Record<string, TimeSeriesRow>>((acc, row) => {
       if (!acc[row.date]) acc[row.date] = { date: row.date }
@@ -259,7 +247,6 @@ export default function NewDashboard() {
     }, {})
   )
 
-  // ---------------- DISTRIBUTION ----------------
   const symptomAgg = Object.values(
     data.reduce<Record<string, { name: string; value: number }>>(
       (acc, row) => {
@@ -284,12 +271,10 @@ export default function NewDashboard() {
   return (
     <div className="bg-[#F8FAFC] min-h-screen p-6 grid grid-cols-12 gap-6">
 
-      {/* LEFT */}
       <div className="col-span-12 lg:col-span-9 space-y-6">
 
         <h1 className="text-xl font-semibold">Infodemiology Dashboard</h1>
 
-        {/* SOURCE SWITCH */}
         <div className="flex gap-2 bg-white p-1 rounded-xl shadow-sm w-fit">
           {["google", "reddit", "who"].map((s) => (
             <button
@@ -306,7 +291,6 @@ export default function NewDashboard() {
           ))}
         </div>
 
-        {/* METRICS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Donut label="Signal" value={signalIndex} max={5} />
           <Donut label="Spikes" value={spikeCount} max={10} />
@@ -314,18 +298,22 @@ export default function NewDashboard() {
           <Donut label="Data" value={data.length} max={5000} />
         </div>
 
-        {/* RANKING */}
         {source === "google" && <DiseaseRankingBar data={ranking} />}
 
-        {/* CHARTS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* TIME SERIES */}
           <div className="bg-white p-4 rounded-2xl">
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={symptomTimeSeries}>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={symptomTimeSeries} margin={{ bottom: 60 }}>
                 <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="date" />
+                <XAxis
+                  dataKey="date"
+                  angle={-45}
+                  textAnchor="end"
+                  interval="preserveStartEnd"
+                  tick={{ fontSize: 10 }}
+                />
                 <YAxis />
                 <Tooltip />
                 {topSymptoms.map((s) => (
@@ -337,10 +325,16 @@ export default function NewDashboard() {
 
           {/* DISTRIBUTION */}
           <div className="bg-white p-4 rounded-2xl">
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={symptomAgg}>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={symptomAgg} margin={{ bottom: 60 }}>
                 <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="name" />
+                <XAxis
+                  dataKey="name"
+                  angle={-45}
+                  textAnchor="end"
+                  interval="preserveStartEnd"
+                  tick={{ fontSize: 10 }}
+                />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="value" fill="#6366F1" />
@@ -351,7 +345,6 @@ export default function NewDashboard() {
         </div>
       </div>
 
-      {/* RIGHT */}
       <div className="col-span-12 lg:col-span-3 bg-white p-4 rounded-2xl space-y-3">
         <Calendar
           selectRange
