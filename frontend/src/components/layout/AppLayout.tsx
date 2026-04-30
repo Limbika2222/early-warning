@@ -27,10 +27,10 @@ export default function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#9bd5d1] via-[#8cced0] to-[#b5e3dc] p-6">
+    <div className="min-h-screen bg-slate-50">
 
-      {/* 🌟 Glass Container */}
-      <div className="h-full rounded-[32px] bg-white/40 backdrop-blur-xl border border-white/40 shadow-2xl overflow-hidden flex">
+      {/* 🌟 Main Container */}
+      <div className="h-full flex">
 
         {/* 🔹 Sidebar */}
         <Sidebar />
@@ -42,7 +42,7 @@ export default function AppLayout() {
           <Header title={getTitle()} />
 
           {/* 🔹 Page Content */}
-          <main className="flex-1 overflow-y-auto p-10">
+          <main className="flex-1 overflow-y-auto p-8">
             <div className="max-w-7xl mx-auto">
 
               {/* 🔥 CRITICAL: This controls routing */}

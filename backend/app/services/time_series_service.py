@@ -1,54 +1,65 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-
 class TimeSeriesService:
 
     def generate_time_series(self, signals):
-        time_series = defaultdict(lambda: defaultdict(int))
+        # 🔥 ONLY USE SIGNAL DATES
+        date_symptom_map = {}
 
         for signal in signals:
             date = signal.get("date")
+            if not date:
+                continue
+            
             symptoms = signal.get("symptoms", [])
-
             for symptom in symptoms:
-                time_series[date][symptom] += 1
+                key = (date, symptom)
+                date_symptom_map[key] = date_symptom_map.get(key, 0) + 1
 
-        return dict(time_series)
+        # convert to list
+        time_series = [
+            {"date": d, "symptom": s, "count": c}
+            for (d, s), c in date_symptom_map.items()
+        ]
+
+        return time_series
 
     def fill_missing_dates_per_symptom(self, time_series):
-        """
-        Fill missing dates for EACH symptom separately
-        """
 
-        all_dates = sorted(time_series.keys())
-        if not all_dates:
-            return []
+        # group by symptom
+        symptom_map = defaultdict(list)
 
-        start = datetime.strptime(all_dates[0], "%Y-%m-%d")
-        end = datetime.strptime(all_dates[-1], "%Y-%m-%d")
+        for item in time_series:
+            symptom_map[item["symptom"]].append(item)
 
-        # 🔹 collect all symptoms
-        all_symptoms = set()
-        for symptoms in time_series.values():
-            all_symptoms.update(symptoms.keys())
+        filled = []
 
-        result = []
+        for symptom, records in symptom_map.items():
 
-        for symptom in all_symptoms:
-            current = start
+            # sort by date
+            records = sorted(records, key=lambda x: x["date"])
 
-            while current <= end:
+            # ✅ FIX: Skip empty record lists to prevent IndexError
+            if not records:
+                continue
+
+            start_date = datetime.strptime(records[0]["date"], "%Y-%m-%d")
+            end_date = datetime.strptime(records[-1]["date"], "%Y-%m-%d")
+
+            existing_dates = {r["date"]: r["count"] for r in records}
+
+            current = start_date
+
+            while current <= end_date:
                 date_str = current.strftime("%Y-%m-%d")
 
-                count = time_series.get(date_str, {}).get(symptom, 0)
-
-                result.append({
+                filled.append({
                     "date": date_str,
                     "symptom": symptom,
-                    "count": count
+                    "count": existing_dates.get(date_str, 0)
                 })
 
                 current += timedelta(days=1)
 
-        return result
+        return filled

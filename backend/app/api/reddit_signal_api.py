@@ -1,13 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from datetime import datetime
+from typing import Optional
 
 from app.services.reddit_service import RedditService
 from app.services.reddit_filter_service import RedditFilterService
 from app.services.symptom_extraction_service import SymptomExtractionService
 from app.services.time_series_service import TimeSeriesService
 from app.services.ewma_service import EWMASignalService
-
-# 🔥 NEW IMPORT (Disease Detection)
 from app.services.disease_detection_service import DiseaseDetectionService
 
 router = APIRouter()
@@ -18,9 +17,12 @@ router = APIRouter()
 alert_history = []
 
 
-# ❗ ROUTE (final = /api/reddit/signal because main.py has prefix "/api")
+# ❗ ROUTE (final = /api/reddit/signal)
 @router.get("/reddit/signal")
-def get_reddit_signal():
+def get_reddit_signal(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+):
 
     # -------------------------------------------------
     # Initialize services
@@ -30,8 +32,6 @@ def get_reddit_signal():
     extractor = SymptomExtractionService()
     ts_service = TimeSeriesService()
     ewma_service = EWMASignalService()
-
-    # 🔥 NEW SERVICE
     disease_service = DiseaseDetectionService()
 
     # -------------------------------------------------
@@ -40,7 +40,36 @@ def get_reddit_signal():
     posts = reddit_service.fetch_health_signals() or []
 
     # -------------------------------------------------
-    # Step 2: Filter
+    # 🔥 NEW: FILTER POSTS BY DATE RANGE
+    # -------------------------------------------------
+    if start_date or end_date:
+        filtered_by_date = []
+
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else None
+
+        for post in posts:
+            post_date_str = post.get("created_date")
+
+            if not post_date_str:
+                continue
+
+            try:
+                post_dt = datetime.strptime(post_date_str[:10], "%Y-%m-%d")
+            except:
+                continue
+
+            if start_dt and post_dt < start_dt:
+                continue
+            if end_dt and post_dt > end_dt:
+                continue
+
+            filtered_by_date.append(post)
+
+        posts = filtered_by_date
+
+    # -------------------------------------------------
+    # Step 2: Filter (health relevance)
     # -------------------------------------------------
     filtered_posts = filter_service.filter_posts(posts) or []
 
@@ -49,11 +78,22 @@ def get_reddit_signal():
     # -------------------------------------------------
     signals = extractor.process_posts(filtered_posts) or []
 
+    # 🔥 FALLBACK (if no data in selected range)
+    if len(signals) == 0:
+        # use original posts (no date filter)
+        fallback_posts = filter_service.filter_posts(
+            reddit_service.fetch_health_signals()
+        ) or []
+
+        signals = extractor.process_posts(fallback_posts) or []
+
     # -------------------------------------------------
-    # Step 4: Time series
+    # Step 4: Time series (FIXED)
     # -------------------------------------------------
     time_series = ts_service.generate_time_series(signals) or []
-    flattened = ts_service.fill_missing_dates_per_symptom(time_series) or []
+
+    # 🔥 FIX: keep date continuity for EWMA
+    flattened = ts_service.fill_missing_dates_per_symptom(time_series)
 
     # -------------------------------------------------
     # Step 5: Alerts (WITH TIMESTAMP + HISTORY)
@@ -62,21 +102,25 @@ def get_reddit_signal():
 
     timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-    # attach timestamp to alerts
     for alert in alerts:
         alert["generated_at"] = timestamp
 
-    # store history
     alert_history.extend(alerts)
 
-    # keep last 50 alerts only
+    # keep last 50 alerts
     if len(alert_history) > 50:
         del alert_history[:-50]
 
     # -------------------------------------------------
-    # 🔥 NEW STEP 6: DISEASE DETECTION
+    # Step 6: DISEASE DETECTION
     # -------------------------------------------------
     probable_diseases = disease_service.detect_diseases(flattened)
+
+    # 🔥 Link alerts to top disease
+    if alerts and probable_diseases:
+        top_disease = probable_diseases[0]["disease"]
+        for alert in alerts:
+            alert["likely_disease"] = top_disease
 
     # -------------------------------------------------
     # Step 7: Metrics
@@ -91,7 +135,6 @@ def get_reddit_signal():
         )
     )
 
-    # 🔥 Compute top symptom safely
     symptom_counts = {}
     for item in flattened:
         count = item.get("count", 0)
@@ -116,8 +159,44 @@ def get_reddit_signal():
     }
 
     # -------------------------------------------------
-    # Step 8: Sample posts (limit for UI)
+    # Step 8: Sample posts (STRICT DATE CONSISTENCY)
     # -------------------------------------------------
+
+    # 🔥 sort posts by date (latest first)
+    filtered_posts = sorted(
+        filtered_posts,
+        key=lambda x: x.get("created_date", ""),
+        reverse=True
+    )
+
+    # 🔥 ensure only correct date range (extra safety)
+    if start_date or end_date:
+        strict_posts = []
+
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") if end_date else None
+
+        for post in filtered_posts:
+            post_date_str = post.get("created_date")
+
+            if not post_date_str:
+                continue
+
+            try:
+                post_dt = datetime.strptime(post_date_str[:10], "%Y-%m-%d")
+            except:
+                continue
+
+            if start_dt and post_dt < start_dt:
+                continue
+            if end_dt and post_dt > end_dt:
+                continue
+
+            strict_posts.append(post)
+
+        filtered_posts = strict_posts
+
+    # 🔥 final sample
     sample_posts = filtered_posts[:10]
 
     # -------------------------------------------------
@@ -129,7 +208,5 @@ def get_reddit_signal():
         "alert_history": alert_history,
         "metrics": metrics,
         "posts": sample_posts,
-
-        # 🔥 NEW OUTPUT
         "probable_diseases": probable_diseases
     }

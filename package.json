@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
+    "@types/react-date-range": "^1.4.10",
     "framer-motion": "^12.34.3",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",

@@ -40,7 +40,7 @@ class DiseaseDetectionService:
     def detect_diseases(self, time_series: List[Dict]) -> List[Dict]:
         """
         Input: time_series data
-        Output: ranked diseases with probabilities (0 → 1)
+        Output: ranked diseases with realistic probabilities (0 → 1)
         """
 
         # -----------------------------
@@ -54,8 +54,11 @@ class DiseaseDetectionService:
                 if symptom:
                     symptom_counts[symptom] += item.get("count", 0)
 
+        # 🔥 NEW: total activity (important for realism)
+        total_signal = sum(symptom_counts.values()) or 1
+
         # -----------------------------
-        # Step 2: Score diseases (FIXED)
+        # Step 2: Score diseases (REALISTIC)
         # -----------------------------
         disease_scores = []
 
@@ -66,11 +69,13 @@ class DiseaseDetectionService:
 
             for symptom, weight in weights.items():
                 if symptom in symptom_counts:
-                    # ✅ Normalize contribution (0 → 1 per symptom)
-                    presence = min(symptom_counts[symptom] / 3, 1)
+                    # 🔥 NORMALIZE based on overall activity
+                    presence = symptom_counts[symptom] / total_signal
                     score += weight * presence
 
+            # 🔥 Normalize + cap (prevents 100%)
             probability = score / max_score if max_score > 0 else 0
+            probability = min(probability, 0.95)
 
             disease_scores.append({
                 "disease": disease,

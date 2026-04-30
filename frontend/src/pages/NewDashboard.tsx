@@ -67,7 +67,16 @@ interface TimeSeriesRow {
   [key: string]: number | string
 }
 
+// 🎨 PROFESSIONAL COLOR SYSTEM
 const COLORS = ["#6366F1", "#E5E7EB"]
+
+const symptomColors: Record<string, string> = {
+  fever: "#EF4444",
+  cough: "#F59E0B",
+  fatigue: "#6366F1",
+  headache: "#8B5CF6",
+  chills: "#06B6D4",
+}
 
 // ---------------- DONUT ----------------
 function Donut({
@@ -82,7 +91,7 @@ function Donut({
   const percentage = Math.min((value / max) * 100, 100)
 
   return (
-    <div className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center">
+    <div className="bg-white border border-gray-200 p-4 rounded-2xl flex flex-col items-center">
       <ResponsiveContainer width={100} height={100}>
         <PieChart>
           <Pie
@@ -97,7 +106,7 @@ function Donut({
         </PieChart>
       </ResponsiveContainer>
 
-      <p className="text-sm font-semibold mt-2">{label}</p>
+      <p className="text-sm font-semibold text-gray-800 mt-2">{label}</p>
       <p className="text-xs text-gray-500">{Math.round(value)}</p>
     </div>
   )
@@ -269,27 +278,13 @@ export default function NewDashboard() {
   const riskValue = riskMap[riskLevel] || 1
 
   return (
-    <div className="bg-[#F8FAFC] min-h-screen p-6 grid grid-cols-12 gap-6">
+    <div className="bg-slate-50 min-h-screen p-6 grid grid-cols-12 gap-6">
 
       <div className="col-span-12 lg:col-span-9 space-y-6">
 
-        <h1 className="text-xl font-semibold">Infodemiology Dashboard</h1>
-
-        <div className="flex gap-2 bg-white p-1 rounded-xl shadow-sm w-fit">
-          {["google", "reddit", "who"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setSource(s as DataSource)}
-              className={`px-4 py-2 rounded-lg ${
-                source === s
-                  ? "bg-indigo-600 text-white"
-                  : "text-gray-500 hover:bg-gray-100"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <h1 className="text-xl font-semibold text-slate-800">
+          Infodemiology Dashboard
+        </h1>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Donut label="Signal" value={signalIndex} max={5} />
@@ -303,7 +298,7 @@ export default function NewDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* TIME SERIES */}
-          <div className="bg-white p-4 rounded-2xl">
+          <div className="bg-white border border-gray-200 p-4 rounded-2xl">
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={symptomTimeSeries} margin={{ bottom: 60 }}>
                 <CartesianGrid stroke="#E5E7EB" />
@@ -317,14 +312,21 @@ export default function NewDashboard() {
                 <YAxis />
                 <Tooltip />
                 {topSymptoms.map((s) => (
-                  <Area key={s} type="monotone" dataKey={s} />
+                  <Area
+                    key={s}
+                    type="monotone"
+                    dataKey={s}
+                    stroke={symptomColors[s] || "#6366F1"}
+                    fill={symptomColors[s] || "#6366F1"}
+                    fillOpacity={0.2}
+                  />
                 ))}
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
           {/* DISTRIBUTION */}
-          <div className="bg-white p-4 rounded-2xl">
+          <div className="bg-white border border-gray-200 p-4 rounded-2xl">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={symptomAgg} margin={{ bottom: 60 }}>
                 <CartesianGrid stroke="#E5E7EB" />
@@ -337,7 +339,14 @@ export default function NewDashboard() {
                 />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="value" fill="#6366F1" />
+                <Bar dataKey="value">
+                  {symptomAgg.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={symptomColors[entry.name] || "#6366F1"}
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -345,7 +354,7 @@ export default function NewDashboard() {
         </div>
       </div>
 
-      <div className="col-span-12 lg:col-span-3 bg-white p-4 rounded-2xl space-y-3">
+      <div className="col-span-12 lg:col-span-3 bg-white border border-gray-200 p-4 rounded-2xl space-y-3">
         <Calendar
           selectRange
           onChange={(v) => setDateRange(v as DateRange)}
@@ -354,7 +363,7 @@ export default function NewDashboard() {
 
         <button
           onClick={handleReset}
-          className="w-full bg-gray-200 py-2 rounded-xl text-sm"
+          className="w-full bg-slate-200 hover:bg-slate-300 py-2 rounded-xl text-sm font-medium"
         >
           Reset
         </button>
