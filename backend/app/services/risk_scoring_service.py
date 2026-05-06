@@ -9,12 +9,14 @@ from app.models.google_trends import (
 )
 
 # 🔥 IMPORTANT: USE NORMALIZER
-from app.services.symptom_normalizer import normalize_symptom
+from app.services.symptom_normalizer import (
+    normalize_symptom,
+)
 
-
-# -------------------------------------------------
+# =====================================================
 # DISEASE → SYMPTOMS + WEIGHTS
-# -------------------------------------------------
+# =====================================================
+
 DISEASE_SYMPTOMS = {
     "Influenza": {
         "fever": 0.8,
@@ -22,75 +24,119 @@ DISEASE_SYMPTOMS = {
         "chills": 1.8,
         "sore throat": 1.3,
     },
+
     "Dengue": {
         "fever": 1.2,
         "rash": 2.0,
         "joint pain": 1.8,
     },
+
     "Malaria": {
         "fever": 1.5,
         "chills": 2.0,
         "fatigue": 1.0,
     },
+
     "Typhoid": {
         "fever": 1.2,
         "abdominal pain": 1.8,
     },
+
     "Pneumonia": {
         "cough": 1.2,
         "shortness of breath": 2.0,
     },
+
     "Tuberculosis": {
         "cough": 1.2,
         "weight loss": 2.0,
     },
+
     "Common Cold": {
         "runny nose": 1.5,
         "sore throat": 1.2,
     },
+
     "Migraine": {
         "headache": 2.5,
     },
 }
 
+# =====================================================
+# MAP USING NORMALIZED SYMPTOMS
+# =====================================================
 
-# -------------------------------------------------
-# 🔥 MAP USING NORMALIZED SYMPTOMS
-# -------------------------------------------------
 def map_keyword(keyword: str):
+
     keyword = normalize_symptom(keyword)
+
     matches = []
 
     for disease, symptoms in DISEASE_SYMPTOMS.items():
+
         for symptom, weight in symptoms.items():
+
             if symptom in keyword:
-                matches.append((disease, weight))
+
+                matches.append(
+                    (disease, weight)
+                )
+
                 break
 
     return matches
 
+# =====================================================
+# MAIN FUNCTION
+# =====================================================
 
-# -------------------------------------------------
-# 🔥 MAIN FUNCTION (FINAL)
-# -------------------------------------------------
 def compute_disease_risk(
     db: Session,
+    country_id: int | None = None,
     end_date: date | None = None,
-    window_days: int = 7
+    window_days: int = 7,
 ):
-    print("🚀 Starting disease risk computation...")
+
+    print(
+        "🚀 Starting disease risk computation..."
+    )
+
+    print(
+        f"🌍 country_id={country_id}"
+    )
 
     # -------------------------------------------------
     # STEP 1: FIND MAX DATE
     # -------------------------------------------------
-    max_date_row = db.query(
+
+    max_date_query = db.query(
         GoogleTrendsTimeseries.date
-    ).order_by(
-        GoogleTrendsTimeseries.date.desc()
-    ).first()
+    )
+
+    # 🔥 GEO FILTER
+    if country_id is not None:
+
+        max_date_query = (
+            max_date_query.filter(
+                GoogleTrendsTimeseries.country_id
+                == country_id
+            )
+        )
+
+    max_date_row = (
+        max_date_query
+        .order_by(
+            GoogleTrendsTimeseries.date.desc()
+        )
+        .first()
+    )
 
     if not max_date_row:
-        print("❌ No data in DB")
+
+        print(
+            "❌ No data in DB for selected country"
+        )
+
         return []
 
     max_date = max_date_row[0]
@@ -98,110 +144,196 @@ def compute_disease_risk(
     # -------------------------------------------------
     # STEP 2: SAFE DATE HANDLING
     # -------------------------------------------------
-    if end_date is None or end_date > max_date:
+
+    if (
+        end_date is None
+        or end_date > max_date
+    ):
         end_date = max_date
 
-    start_date = end_date - timedelta(days=window_days)
+    start_date = (
+        end_date
+        - timedelta(days=window_days)
+    )
 
-    print(f"📅 Using window: {start_date} → {end_date}")
+    print(
+        f"📅 Using window: "
+        f"{start_date} → {end_date}"
+    )
 
     # -------------------------------------------------
     # STEP 3: FETCH FILTERED DATA
     # -------------------------------------------------
-    rows = (
+
+    query = (
         db.query(
             GoogleTrendsTimeseries,
             GoogleTrendsKeyword,
         )
         .join(
             GoogleTrendsKeyword,
-            GoogleTrendsTimeseries.keyword_id == GoogleTrendsKeyword.id
+            GoogleTrendsTimeseries.keyword_id
+            == GoogleTrendsKeyword.id
         )
         .filter(
-            GoogleTrendsTimeseries.date >= start_date,
-            GoogleTrendsTimeseries.date <= end_date
+            GoogleTrendsTimeseries.date
+            >= start_date,
+
+            GoogleTrendsTimeseries.date
+            <= end_date,
         )
-        .all()
+    )
+
+    # 🔥 GEO FILTER
+    if country_id is not None:
+
+        query = query.filter(
+            GoogleTrendsTimeseries.country_id
+            == country_id
+        )
+
+    rows = query.all()
+
+    print(
+        f"📊 Rows fetched: {len(rows)}"
     )
 
     # -------------------------------------------------
-    # 🔥 FALLBACK IF TOO LITTLE DATA
+    # FALLBACK IF TOO LITTLE DATA
     # -------------------------------------------------
-    if len(rows) < 20:
-        print("⚠️ Sparse data → expanding window")
 
-        rows = (
+    if len(rows) < 20:
+
+        print(
+            "⚠️ Sparse data → expanding window"
+        )
+
+        fallback_query = (
             db.query(
                 GoogleTrendsTimeseries,
                 GoogleTrendsKeyword,
             )
             .join(
                 GoogleTrendsKeyword,
-                GoogleTrendsTimeseries.keyword_id == GoogleTrendsKeyword.id
+                GoogleTrendsTimeseries.keyword_id
+                == GoogleTrendsKeyword.id
             )
-            .all()
         )
 
+        # 🔥 GEO FILTER
+        if country_id is not None:
+
+            fallback_query = (
+                fallback_query.filter(
+                    GoogleTrendsTimeseries.country_id
+                    == country_id
+                )
+            )
+
+        rows = fallback_query.all()
+
     if not rows:
-        print("❌ No data found")
+
+        print(
+            "❌ No data found after filtering"
+        )
+
         return []
 
     # -------------------------------------------------
     # STEP 4: BUILD DATASET
     # -------------------------------------------------
+
     data = []
 
     for ts, kw in rows:
-        keyword = normalize_symptom(kw.keyword_text)
+
+        keyword = normalize_symptom(
+            kw.keyword_text
+        )
 
         matches = map_keyword(keyword)
 
         for disease, weight in matches:
+
             data.append({
                 "disease": disease,
                 "keyword": keyword,
                 "weight": weight,
                 "date": ts.date,
-                "interest": ts.interest_index,
+                "interest":
+                    ts.interest_index,
             })
 
     df = pd.DataFrame(data)
 
     if df.empty:
-        print("⚠️ No mapped symptoms")
+
+        print(
+            "⚠️ No mapped symptoms"
+        )
+
         return []
 
-    df["date"] = pd.to_datetime(df["date"])
-
-    # -------------------------------------------------
-    # 🔥 NORMALIZATION (SAFE)
-    # -------------------------------------------------
-    def safe_normalize(x):
-        if x.max() == x.min():
-            return x / (x.max() + 1e-9)
-        return (x - x.min()) / (x.max() - x.min())
-
-    df["normalized"] = df.groupby("keyword")["interest"].transform(safe_normalize)
-
-    # -------------------------------------------------
-    # 🔥 TREND BOOST (NEW — makes ranking dynamic)
-    # -------------------------------------------------
-    df["trend"] = df.groupby("keyword")["interest"].transform(
-        lambda x: x.iloc[-1] - x.iloc[0] if len(x) > 1 else 0
+    df["date"] = pd.to_datetime(
+        df["date"]
     )
 
-    df["trend_boost"] = df["trend"].clip(lower=0)
+    # -------------------------------------------------
+    # NORMALIZATION
+    # -------------------------------------------------
+
+    def safe_normalize(x):
+
+        if x.max() == x.min():
+
+            return x / (
+                x.max() + 1e-9
+            )
+
+        return (
+            (x - x.min())
+            / (x.max() - x.min())
+        )
+
+    df["normalized"] = (
+        df.groupby("keyword")["interest"]
+        .transform(safe_normalize)
+    )
+
+    # -------------------------------------------------
+    # TREND BOOST
+    # -------------------------------------------------
+
+    df["trend"] = (
+        df.groupby("keyword")["interest"]
+        .transform(
+            lambda x:
+                x.iloc[-1] - x.iloc[0]
+                if len(x) > 1
+                else 0
+        )
+    )
+
+    df["trend_boost"] = (
+        df["trend"]
+        .clip(lower=0)
+    )
 
     # -------------------------------------------------
     # FINAL SCORE
     # -------------------------------------------------
+
     df["weighted_score"] = (
-        df["normalized"] * df["weight"]
-        + 0.3 * df["trend_boost"]   # 🔥 makes ranking responsive
+        df["normalized"]
+        * df["weight"]
+        + 0.3 * df["trend_boost"]
     )
 
     disease_scores = (
-        df.groupby("disease")["weighted_score"]
+        df.groupby("disease")[
+            "weighted_score"
+        ]
         .sum()
         .reset_index()
     )
@@ -209,75 +341,126 @@ def compute_disease_risk(
     # -------------------------------------------------
     # BUILD RESPONSE
     # -------------------------------------------------
+
     results = []
 
     for _, row in disease_scores.iterrows():
-        score = float(row["weighted_score"])
+
+        score = float(
+            row["weighted_score"]
+        )
 
         results.append({
-            "disease": row["disease"],
-            "score": round(score, 3),
+            "disease":
+                row["disease"],
+
+            "score":
+                round(score, 3),
+
             "risk_level": (
-                "HIGH" if score >= 4 else
-                "MEDIUM" if score >= 2 else
-                "LOW"
+                "HIGH"
+                if score >= 4
+                else (
+                    "MEDIUM"
+                    if score >= 2
+                    else "LOW"
+                )
             ),
         })
 
-    print("🔥 FINAL DISEASE RANKING:", results)
+    print(
+        "🔥 FINAL DISEASE RANKING:",
+        results
+    )
 
-    return sorted(results, key=lambda x: x["score"], reverse=True)
+    return sorted(
+        results,
+        key=lambda x: x["score"],
+        reverse=True,
+    )
 
-
-# -------------------------------------------------
+# =====================================================
 # STORE
-# -------------------------------------------------
+# =====================================================
+
 def store_disease_risk(
     db: Session,
     disease_risk_data,
-    calculation_date: date
+    calculation_date: date,
 ):
+
     for item in disease_risk_data:
-        existing = db.query(DiseaseRisk).filter(
-            DiseaseRisk.disease_name == item["disease"],
-            DiseaseRisk.date_calculated == calculation_date
-        ).first()
+
+        existing = (
+            db.query(DiseaseRisk)
+            .filter(
+                DiseaseRisk.disease_name
+                == item["disease"],
+
+                DiseaseRisk.date_calculated
+                == calculation_date,
+            )
+            .first()
+        )
 
         if existing:
-            existing.risk_score = item["score"]
-            existing.risk_level = item["risk_level"]
+
+            existing.risk_score = (
+                item["score"]
+            )
+
+            existing.risk_level = (
+                item["risk_level"]
+            )
+
         else:
-            db.add(DiseaseRisk(
-                disease_name=item["disease"],
-                risk_score=item["score"],
-                risk_level=item["risk_level"],
-                date_calculated=calculation_date,
-                created_at=datetime.utcnow()
-            ))
+
+            db.add(
+                DiseaseRisk(
+                    disease_name=
+                        item["disease"],
+
+                    risk_score=
+                        item["score"],
+
+                    risk_level=
+                        item["risk_level"],
+
+                    date_calculated=
+                        calculation_date,
+
+                    created_at=
+                        datetime.utcnow(),
+                )
+            )
 
     db.commit()
 
-
-# -------------------------------------------------
+# =====================================================
 # PIPELINE
-# -------------------------------------------------
+# =====================================================
+
 def run_full_risk_pipeline(
     db: Session,
-    analysis_date: date | None = None
+    analysis_date: date | None = None,
+    country_id: int | None = None,
 ):
+
     if analysis_date is None:
         analysis_date = date.today()
 
     results = compute_disease_risk(
         db,
-        end_date=analysis_date
+        country_id=country_id,
+        end_date=analysis_date,
     )
 
     if results:
+
         store_disease_risk(
             db,
             results,
-            calculation_date=analysis_date
+            calculation_date=analysis_date,
         )
 
     return results

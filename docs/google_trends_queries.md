@@ -53,11 +53,21 @@ of infectious disease outbreaks.
 
 ---
 
+## Dengue
+- fever
+- skin rash
+- joint pain
+- fever skin rash
+- joint pain skin rash
+- skin rash fever
+
+---
+
 ## Zika
-- fever rash
+- fever skin rash
 - joint pain fever
-- joint pain rash
-- rash fever
+- joint pain skin rash
+- skin rash fever
 - conjunctivitis zika
 - zika symptoms
 - zika fever

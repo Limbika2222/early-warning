@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import date
 from typing import Optional
 from collections import defaultdict
 
 from app.utils.database import SessionLocal
+
 from app.models.google_trends import (
     GoogleTrendsTimeseries,
     GoogleTrendsKeyword,
@@ -12,53 +13,170 @@ from app.models.google_trends import (
     Country,
 )
 
-router = APIRouter(prefix="/api/trends", tags=["trends"])
+# =====================================================
+# Router
+# =====================================================
 
-print("✅ trends.py loaded (UPLOAD HISTORY FIXED)")
+router = APIRouter(
+    prefix="/api/trends",
+    tags=["trends"],
+)
+
+print("✅ trends.py loaded (GLOBAL GEO-AWARE VERSION)")
 
 
-# --------------------
+# =====================================================
 # DB dependency
-# --------------------
+# =====================================================
+
 def get_db():
     db = SessionLocal()
+
     try:
         yield db
+
     finally:
         db.close()
 
 
 # =====================================================
-# 📊 GET: Upload history (🔥 FIXED)
+# 🌍 GET: Available countries
 # =====================================================
-@router.get("/uploads")
-def list_upload_history(db: Session = Depends(get_db)):
+
+@router.get("/countries")
+def list_countries(
+    db: Session = Depends(get_db),
+):
     """
-    Returns upload history from GoogleTrendsUpload table
+    Returns all supported countries.
+    Used by frontend country selector.
     """
 
-    uploads = (
-        db.query(GoogleTrendsUpload, Country)
-        .join(Country, GoogleTrendsUpload.country_id == Country.id)
-        .order_by(GoogleTrendsUpload.uploaded_at.desc())
+    print("🌍 /countries endpoint called")
+
+    countries = (
+        db.query(Country)
+        .order_by(Country.name.asc())
         .all()
     )
 
+    print(f"🌍 Countries found: {len(countries)}")
+
     return [
         {
-            "id": u.GoogleTrendsUpload.id,
-            "keyword": u.GoogleTrendsUpload.keywords,  # 🔥 FIX
-            "country": u.Country.name,
-            "rows_inserted": u.GoogleTrendsUpload.rows_inserted,
-            "uploaded_at": u.GoogleTrendsUpload.uploaded_at.isoformat(),
+            "id": country.id,
+            "name": country.name,
+            "iso2": country.iso2,
         }
-        for u in uploads
+        for country in countries
+    ]
+
+
+# =====================================================
+# 📊 GET: Upload history
+# =====================================================
+
+@router.get("/uploads")
+def list_upload_history(
+    country_iso2: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns Google Trends upload history.
+
+    Optional:
+    - filter by country ISO2
+    """
+
+    print(
+        f"📚 Upload history requested "
+        f"(country_iso2={country_iso2})"
+    )
+
+    # -------------------------------------------------
+    # Base query
+    # -------------------------------------------------
+
+    query = (
+        db.query(
+            GoogleTrendsUpload,
+            Country,
+        )
+        .join(
+            Country,
+            GoogleTrendsUpload.country_id == Country.id,
+        )
+    )
+
+    # -------------------------------------------------
+    # Optional geo filter
+    # -------------------------------------------------
+
+    if country_iso2:
+
+        country = (
+            db.query(Country)
+            .filter(
+                Country.iso2 == country_iso2.upper()
+            )
+            .first()
+        )
+
+        if not country:
+            raise HTTPException(
+                status_code=404,
+                detail="Country not found",
+            )
+
+        query = query.filter(
+            GoogleTrendsUpload.country_id
+            == country.id
+        )
+
+    # -------------------------------------------------
+    # Fetch uploads
+    # -------------------------------------------------
+
+    uploads = (
+        query.order_by(
+            GoogleTrendsUpload.uploaded_at.desc()
+        )
+        .all()
+    )
+
+    print(f"🔥 BACKEND UPLOADS: {uploads}")
+
+    # -------------------------------------------------
+    # Response
+    # -------------------------------------------------
+
+    return [
+        {
+            "id": upload.GoogleTrendsUpload.id,
+
+            "keyword":
+                upload.GoogleTrendsUpload.keywords,
+
+            "country": {
+                "id": upload.Country.id,
+                "name": upload.Country.name,
+                "iso2": upload.Country.iso2,
+            },
+
+            "rows_inserted":
+                upload.GoogleTrendsUpload.rows_inserted,
+
+            "uploaded_at":
+                upload.GoogleTrendsUpload.uploaded_at.isoformat(),
+        }
+        for upload in uploads
     ]
 
 
 # =====================================================
 # 📈 GET: Aggregated disease signal
 # =====================================================
+
 @router.get("/aggregate")
 def aggregate_disease_signal(
     disease_id: int,
@@ -67,65 +185,160 @@ def aggregate_disease_signal(
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    print(f"[AGGREGATE] disease_id={disease_id}, country_id={country_id}")
+    """
+    Aggregates Google Trends signals
+    for a disease within a country.
+    """
 
-    # --------------------
-    # Fetch keywords
-    # --------------------
+    print(
+        f"[AGGREGATE] "
+        f"disease_id={disease_id}, "
+        f"country_id={country_id}"
+    )
+
+    # -------------------------------------------------
+    # Validate country
+    # -------------------------------------------------
+
+    country = (
+        db.query(Country)
+        .filter(Country.id == country_id)
+        .first()
+    )
+
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Country not found",
+        )
+
+    # -------------------------------------------------
+    # Fetch disease keywords
+    # -------------------------------------------------
+
     keywords = (
         db.query(GoogleTrendsKeyword)
-        .filter(GoogleTrendsKeyword.disease_id == disease_id)
+        .filter(
+            GoogleTrendsKeyword.disease_id
+            == disease_id
+        )
         .all()
     )
 
     if not keywords:
-        raise HTTPException(status_code=404, detail="No keywords found")
+        raise HTTPException(
+            status_code=404,
+            detail="No keywords found for disease",
+        )
 
     keyword_ids = [k.id for k in keywords]
 
-    # --------------------
-    # Fetch timeseries
-    # --------------------
+    print(
+        f"[AGGREGATE] "
+        f"Keywords found: {len(keyword_ids)}"
+    )
+
+    # -------------------------------------------------
+    # Geo-aware timeseries query
+    # -------------------------------------------------
+
     query = (
         db.query(
             GoogleTrendsTimeseries.date,
             GoogleTrendsTimeseries.interest_index,
         )
         .filter(
-            GoogleTrendsTimeseries.keyword_id.in_(keyword_ids),
-            GoogleTrendsTimeseries.country_id == country_id,
+            GoogleTrendsTimeseries.keyword_id.in_(
+                keyword_ids
+            ),
+
+            GoogleTrendsTimeseries.country_id
+            == country_id,
         )
     )
 
+    # -------------------------------------------------
+    # Optional date filters
+    # -------------------------------------------------
+
     if start_date:
-        query = query.filter(GoogleTrendsTimeseries.date >= start_date)
+        query = query.filter(
+            GoogleTrendsTimeseries.date
+            >= start_date
+        )
 
     if end_date:
-        query = query.filter(GoogleTrendsTimeseries.date <= end_date)
+        query = query.filter(
+            GoogleTrendsTimeseries.date
+            <= end_date
+        )
 
     rows = query.all()
 
+    # -------------------------------------------------
+    # No rows found
+    # -------------------------------------------------
+
     if not rows:
-        raise HTTPException(status_code=404, detail="No data found")
 
-    print(f"[AGGREGATE] Rows fetched: {len(rows)}")
+        print(
+            "[AGGREGATE] "
+            "No rows found"
+        )
 
-    # --------------------
-    # Aggregate (average)
-    # --------------------
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "No trend data found for "
+                "selected country and disease"
+            ),
+        )
+
+    print(
+        f"[AGGREGATE] "
+        f"Rows fetched: {len(rows)}"
+    )
+
+    # -------------------------------------------------
+    # Aggregate by date
+    # -------------------------------------------------
+
     grouped = defaultdict(list)
 
-    for r in rows:
-        grouped[r.date.isoformat()].append(r.interest_index)
+    for row in rows:
+        grouped[row.date.isoformat()].append(
+            row.interest_index
+        )
 
     result = [
         {
-            "date": d,
-            "value": sum(vals) / len(vals),
+            "date": date_key,
+            "value": round(
+                sum(values) / len(values),
+                2,
+            ),
         }
-        for d, vals in sorted(grouped.items())
+        for date_key, values
+        in sorted(grouped.items())
     ]
 
-    print(f"[AGGREGATE] Output points: {len(result)}")
+    print(
+        f"[AGGREGATE] "
+        f"Output points: {len(result)}"
+    )
 
-    return result
+    # -------------------------------------------------
+    # Final response
+    # -------------------------------------------------
+
+    return {
+        "country": {
+            "id": country.id,
+            "name": country.name,
+            "iso2": country.iso2,
+        },
+
+        "disease_id": disease_id,
+
+        "points": result,
+    }

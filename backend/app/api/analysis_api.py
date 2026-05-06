@@ -17,7 +17,7 @@ def generate_disease_explanation(disease_name: str):
         "COVID-19": "Multiple respiratory symptoms like cough, fatigue, and shortness of breath are trending.",
         "Influenza": "Common flu symptoms such as fever, fatigue, and chills are increasing.",
         "Malaria": "Symptoms like fever, chills, and headache indicate possible malaria spread.",
-        "Dengue": "High fever with joint and muscle pain suggests dengue activity.",
+        "Dengue": "High fever, skin rash, and joint pain suggests Dengue Fever activity.",
         "Typhoid": "Fever and abdominal pain trends indicate possible typhoid cases.",
         "Pneumonia": "Respiratory symptoms like cough and chest pain are rising.",
         "Tuberculosis": "Chronic cough and weight loss signals TB patterns.",
