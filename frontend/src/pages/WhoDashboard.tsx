@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { formatDistanceToNow } from "date-fns"
 
 import {
   fetchOutbreakHistory,
@@ -11,6 +12,8 @@ import type {
   DiseaseSummary,
   CountrySummary,
 } from "../api/who"
+
+import OutbreakMap from "../components/who/OutbreakMap"
 
 // =====================================================
 // SEVERITY COLORS
@@ -53,6 +56,34 @@ function getSeverityClasses(
         text-blue-700
         border border-blue-200
       `
+  }
+}
+
+function formatRelativeTime(
+  dateString?: string
+) {
+
+  if (!dateString) {
+
+    return "Unknown time"
+  }
+
+  try {
+
+    const parsedDate = new Date(
+      dateString
+    )
+
+    return formatDistanceToNow(
+      parsedDate,
+      {
+        addSuffix: true,
+      }
+    )
+
+  } catch {
+
+    return "Unknown time"
   }
 }
 
@@ -200,6 +231,10 @@ export default function WhoDashboard() {
         </div>
 
       </div>
+
+      <OutbreakMap
+        countries={countries}
+      />
 
       {/* DISEASE SUMMARY */}
       <div
@@ -430,6 +465,19 @@ export default function WhoDashboard() {
                       Source:
                       {" "}
                       {report.source}
+                    </span>
+
+                    <span
+                      className="
+                        bg-[#1f9c94]/10
+                        text-[#1f9c94]
+                        px-3 py-1 rounded-full
+                        font-medium
+                      "
+                    >
+                      {formatRelativeTime(
+                        report.ingested_at
+                      )}
                     </span>
 
                   </div>
