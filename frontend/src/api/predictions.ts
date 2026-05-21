@@ -34,17 +34,46 @@ export interface PredictionResponse {
 }
 
 // =====================================================
+// SEASONALITY TYPES
+// =====================================================
+
+export interface SeasonalityResult {
+
+  disease: string
+
+  peak_month: string
+
+  top_months: string[]
+
+  seasonality_strength: number
+
+  seasonal_risk: string
+}
+
+export interface SeasonalityResponse {
+
+  country: string
+
+  results: SeasonalityResult[]
+}
+
+// =====================================================
 // FETCH LIVE PREDICTIONS
+// COUNTRY-AWARE
 // =====================================================
 
 export async function
-fetchPredictions():
+fetchPredictions(
+
+  country: string = "GLOBAL"
+
+):
 
 Promise<PredictionResponse> {
 
   const response = await fetch(
 
-    `${API_BASE}/api/predictions/live`
+    `${API_BASE}/api/predictions/live?country=${country}`
   )
 
   if (!response.ok) {
@@ -59,16 +88,21 @@ Promise<PredictionResponse> {
 
 // =====================================================
 // FETCH HIGH RISK
+// COUNTRY-AWARE
 // =====================================================
 
 export async function
-fetchHighRiskPredictions():
+fetchHighRiskPredictions(
+
+  country: string = "GLOBAL"
+
+):
 
 Promise<PredictionResponse> {
 
   const response = await fetch(
 
-    `${API_BASE}/api/predictions/high-risk`
+    `${API_BASE}/api/predictions/high-risk?country=${country}`
   )
 
   if (!response.ok) {
@@ -83,14 +117,29 @@ Promise<PredictionResponse> {
 
 // =====================================================
 // FETCH SEASONALITY
+// COUNTRY-AWARE
 // =====================================================
 
-export async function fetchSeasonality() {
+export async function
+fetchSeasonality(
+
+  country: string = "GLOBAL"
+
+):
+
+Promise<SeasonalityResponse> {
 
   const response = await fetch(
 
-    `${import.meta.env.VITE_API_BASE}/api/predictions/seasonality`
+    `${API_BASE}/api/predictions/seasonality?country=${country}`
   )
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Failed to fetch seasonality data"
+    )
+  }
 
   return response.json()
 }

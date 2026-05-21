@@ -79,6 +79,18 @@ function getCountryName(code: string) {
   return countries[code] || code
 }
 
+const COUNTRY_OPTIONS = [
+  { code: "GLOBAL", name: "Global" },
+  { code: "ZA", name: "South Africa" },
+  { code: "IN", name: "India" },
+  { code: "MW", name: "Malawi" },
+  { code: "US", name: "United States" },
+  { code: "NG", name: "Nigeria" },
+  { code: "KE", name: "Kenya" },
+  { code: "TZ", name: "Tanzania" },
+  { code: "ET", name: "Ethiopia" },
+]
+
 // =====================================================
 // COMPONENT
 // =====================================================
@@ -94,6 +106,9 @@ export default function PredictionsDashboard() {
   const [loading, setLoading] =
     useState(true)
 
+  const [selectedCountry, setSelectedCountry] =
+    useState("GLOBAL")
+
   // ===================================================
   // FETCH DATA
   // ===================================================
@@ -102,17 +117,23 @@ export default function PredictionsDashboard() {
 
     async function loadData() {
 
+      setLoading(true)
+
       try {
 
         const predictionData =
-          await fetchPredictions()
+          await fetchPredictions(
+            selectedCountry
+          )
 
         setPredictions(
           predictionData.predictions || []
         )
 
         const seasonalData =
-          await fetchSeasonality()
+          await fetchSeasonality(
+            selectedCountry
+          )
 
         setSeasonality(
           seasonalData.results || []
@@ -130,7 +151,7 @@ export default function PredictionsDashboard() {
 
     loadData()
 
-  }, [])
+  }, [selectedCountry])
 
   // ===================================================
   // STATS
@@ -158,6 +179,14 @@ export default function PredictionsDashboard() {
       score: item.combined_score,
     }))
 
+  const strongSeasonality =
+    seasonality.filter(
+
+      (item) =>
+
+        item.seasonality_strength >= 0.75
+    )
+
   // ===================================================
   // LOADING
   // ===================================================
@@ -173,6 +202,52 @@ export default function PredictionsDashboard() {
     )
   }
 
+  if (
+    !loading &&
+    predictions.length === 0
+  ) {
+    return (
+      <div className="p-6">
+
+        <div
+          className="
+            bg-white
+            border
+            rounded-2xl
+            p-10
+            text-center
+          "
+        >
+
+          <h2
+            className="
+              text-xl
+              font-bold
+              text-gray-700
+            "
+          >
+            No intelligence available
+          </h2>
+
+          <p
+            className="
+              text-sm
+              text-gray-500
+              mt-2
+            "
+          >
+            No outbreak signals detected for{" "}
+            {getCountryName(
+              selectedCountry
+            )}
+          </p>
+
+        </div>
+
+      </div>
+    )
+  }
+
   // ===================================================
   // UI
   // ===================================================
@@ -184,7 +259,6 @@ export default function PredictionsDashboard() {
       {/* HEADER */}
 
       <div>
-
         <h1
           className="
             text-3xl
@@ -202,9 +276,11 @@ export default function PredictionsDashboard() {
             mt-1
           "
         >
-          Multi-source outbreak forecasting
+          Multi-source outbreak forecasting for{" "}
+          <strong>
+            {getCountryName(selectedCountry)}
+          </strong>
         </p>
-
       </div>
 
       {/* STATS */}
@@ -618,7 +694,100 @@ export default function PredictionsDashboard() {
 
     </div>
 
+    <div
+      className="
+        flex
+        items-center
+        gap-3
+      "
+    >
+
+      <div
+        className="
+          text-xs
+          uppercase
+          tracking-wide
+          text-gray-400
+          font-semibold
+        "
+      >
+        Intelligence Region
+      </div>
+
+      <select
+        value={selectedCountry}
+        onChange={(e) =>
+          setSelectedCountry(
+            e.target.value
+          )
+        }
+        className="
+          border
+          rounded-xl
+          px-4
+          py-2
+          text-sm
+          bg-white
+          shadow-sm
+          focus:outline-none
+          focus:ring-2
+          focus:ring-indigo-500
+        "
+      >
+
+        {COUNTRY_OPTIONS.map((country) => (
+
+          <option
+            key={country.code}
+            value={country.code}
+          >
+            {country.name}
+          </option>
+
+        ))}
+
+      </select>
+
+    </div>
+
   </div>
+
+  {strongSeasonality.length === 0 && (
+
+    <div
+      className="
+        border
+        rounded-2xl
+        p-8
+        text-center
+        bg-slate-50
+      "
+    >
+
+      <h3
+        className="
+          text-lg
+          font-bold
+          text-gray-700
+        "
+      >
+        No Strong Seasonal Signals
+      </h3>
+
+      <p
+        className="
+          text-sm
+          text-gray-500
+          mt-2
+        "
+      >
+        No high-confidence seasonal outbreak
+        intelligence detected for this country.
+      </p>
+
+    </div>
+
+  )}
 
   <div
     className="
@@ -629,7 +798,7 @@ export default function PredictionsDashboard() {
     "
   >
 
-    {seasonality.map((item) => (
+    {strongSeasonality.map((item) => (
 
       <div
         key={item.disease}
@@ -674,7 +843,8 @@ export default function PredictionsDashboard() {
                 mt-1
               "
             >
-              Global Seasonal Intelligence
+              {getCountryName(selectedCountry)}
+              Seasonal Intelligence
             </p>
 
           </div>
@@ -934,8 +1104,7 @@ export default function PredictionsDashboard() {
                     mt-1
                   "
                 >
-                  Country:
-                  {" "}
+                  Country:{" "}
                   {
                     getCountryName(
                       prediction.country
