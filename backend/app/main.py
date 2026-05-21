@@ -36,11 +36,19 @@ from app.api.reddit_signal_api import (
 )
 
 # -------------------------------------------------
-# WHO API (NEW)
+# WHO API
 # -------------------------------------------------
 
 from app.api.who_api import (
     router as who_router,
+)
+
+# -------------------------------------------------
+# Prediction API (NEW)
+# -------------------------------------------------
+
+from app.api.prediction_api import (
+    router as prediction_router,
 )
 
 # =====================================================
@@ -54,7 +62,7 @@ app = FastAPI(
         "Warning System API"
     ),
 
-    version="2.6.0",
+    version="2.7.0",
 )
 
 # =====================================================
@@ -80,9 +88,6 @@ app.add_middleware(
 # -------------------------------------------------
 # Upload Routes
 # -------------------------------------------------
-# upload_api.py likely has NO internal prefix
-# so prefix added here
-# -------------------------------------------------
 
 app.include_router(
     upload_router,
@@ -94,10 +99,6 @@ app.include_router(
 
 # -------------------------------------------------
 # Trends Routes
-# -------------------------------------------------
-# trends.py ALREADY contains:
-# prefix="/api/trends"
-# so DO NOT double-prefix here
 # -------------------------------------------------
 
 app.include_router(
@@ -129,11 +130,19 @@ app.include_router(
 )
 
 # -------------------------------------------------
-# WHO API (NEW)
+# WHO API
 # -------------------------------------------------
 
 app.include_router(
     who_router
+)
+
+# -------------------------------------------------
+# Prediction API (NEW)
+# -------------------------------------------------
+
+app.include_router(
+    prediction_router
 )
 
 # -------------------------------------------------
@@ -180,14 +189,22 @@ app.include_router(
 def root():
 
     return {
-        "status": "API running",
 
-        "version": "2.6.0",
+        "status":
+            "API running",
+
+        "version":
+            "2.7.0",
 
         "services": [
+
             "google_trends",
+
             "reddit",
+
             "who",
+
+            "prediction_engine",
         ],
     }
 
@@ -199,11 +216,18 @@ def root():
 def health_check():
 
     return {
-        "health": "ok",
+
+        "health":
+            "ok",
 
         "services": {
+
             "google_trends": True,
+
             "reddit": True,
+
             "who": True,
+
+            "prediction_engine": True,
         },
     }

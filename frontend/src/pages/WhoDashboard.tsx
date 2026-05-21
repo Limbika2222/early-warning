@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
+import axios from "axios"
 
 import {
   fetchOutbreakHistory,
@@ -14,6 +15,20 @@ import type {
 } from "../api/who"
 
 import OutbreakMap from "../components/who/OutbreakMap"
+
+const RAW_BASE = import.meta.env.VITE_API_BASE
+
+if (!RAW_BASE) {
+  throw new Error(
+    "VITE_API_BASE missing"
+  )
+}
+
+const CLEAN_BASE = RAW_BASE.endsWith("/")
+  ? RAW_BASE.slice(0, -1)
+  : RAW_BASE
+
+const API_BASE = `${CLEAN_BASE}`
 
 // =====================================================
 // SEVERITY COLORS
@@ -95,52 +110,98 @@ export default function WhoDashboard() {
 
   const [countries, setCountries] = useState<CountrySummary[]>([])
 
+  const [
+    countryDiseases,
+    setCountryDiseases,
+  ] = useState<
+    Record<string, string[]>
+  >({})
+
   const [loading, setLoading] = useState(true)
 
   // =====================================================
   // LOAD DATA
   // =====================================================
 
-  useEffect(() => {
+  async function loadDashboard() {
+    try {
+      setLoading(true)
+      const [
+        history,
+        diseaseSummary,
+        countrySummary,
+      ] = await Promise.all([
+        fetchOutbreakHistory(),
+        fetchDiseaseSummary(),
+        fetchCountrySummary(),
+      ])
 
-    async function load() {
+      const reportsData = history.reports;
+      const diseaseMap: Record<
+        string,
+        Set<string>
+      > = {}
 
-      try {
-
-        setLoading(true)
-
-        const [
-          history,
-          diseaseSummary,
-          countrySummary,
-        ] = await Promise.all([
-          fetchOutbreakHistory(),
-          fetchDiseaseSummary(),
-          fetchCountrySummary(),
-        ])
-
-        setReports(history.reports)
-
-        setDiseases(diseaseSummary.diseases)
-
-        setCountries(countrySummary.countries)
-
-      } catch (err) {
-
-        console.error(
-          "WHO dashboard error:",
-          err
+      reportsData.forEach((report) => {
+        const iso2 =
+          report.country.iso2
+        if (!iso2) return
+        if (!diseaseMap[iso2]) {
+          diseaseMap[iso2] =
+            new Set()
+        }
+        diseaseMap[iso2].add(
+          report.disease
         )
+      })
 
-      } finally {
+      const finalMap: Record<
+        string,
+        string[]
+      > = {}
 
-        setLoading(false)
-      }
+      Object.entries(diseaseMap).forEach(
+        ([iso2, diseases]) => {
+          finalMap[iso2] =
+            Array.from(diseases)
+        }
+      )
+
+      setCountryDiseases(finalMap)
+      setReports(history.reports)
+      setDiseases(diseaseSummary.diseases)
+      setCountries(countrySummary.countries)
+    } catch (err) {
+      console.error(
+        "WHO dashboard error:",
+        err
+      )
+    } finally {
+      setLoading(false)
     }
+  }
 
-    load()
 
+  useEffect(() => {
+    loadDashboard()
   }, [])
+
+  const refreshWHOData = async () => {
+    try {
+      setLoading(true)
+      await axios.post(
+        `${API_BASE}/api/who/refresh`
+      )
+      await loadDashboard()
+    } catch (error) {
+      console.error(
+        "WHO refresh failed",
+        error
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // =====================================================
   // LOADING
@@ -164,17 +225,32 @@ export default function WhoDashboard() {
     <div className="p-6 space-y-6 bg-[#f7faf9] min-h-screen">
 
       {/* HEADER */}
-      <div>
-
-        <h1 className="text-3xl font-bold text-[#1e3f42]">
-          WHO / Official Outbreak Intelligence
-        </h1>
-
-        <p className="text-sm text-gray-500 mt-1">
-          Persistent outbreak intelligence powered by GDELT
-        </p>
-
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-[#1e3f42]">
+            WHO / Official Outbreak Intelligence
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Persistent outbreak intelligence powered by GDELT
+          </p>
+        </div>
+        <button
+          onClick={refreshWHOData}
+          className="
+            px-4 py-2
+            bg-emerald-600
+            hover:bg-emerald-700
+            text-white
+            rounded-xl
+            text-sm
+            font-medium
+            transition
+          "
+        >
+          Refresh WHO Data
+        </button>
       </div>
+
 
       {/* SUMMARY CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -234,6 +310,7 @@ export default function WhoDashboard() {
 
       <OutbreakMap
         countries={countries}
+        diseaseMap={countryDiseases}
       />
 
       {/* DISEASE SUMMARY */}

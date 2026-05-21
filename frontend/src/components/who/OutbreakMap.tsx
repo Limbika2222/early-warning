@@ -9,7 +9,8 @@ import {
   } from "../../api/who"
   
   interface Props {
-    countries: CountrySummary[]
+    countries: CountrySummary[],
+    diseaseMap: Record<string, string[]>
   }
   
   // =====================================================
@@ -75,6 +76,7 @@ import {
   
   export default function OutbreakMap({
     countries,
+    diseaseMap
   }: Props) {
   
     // -------------------------------------------------
@@ -202,6 +204,8 @@ import {
                           {countryName}
                           {"\n"}
                           Outbreaks: {count}
+                          {"\n"}
+                          {(diseaseMap[iso2] || []).join(", ")}
                         </title>
   
                       </Geography>

@@ -9,13 +9,16 @@ from datetime import datetime
 
 from app.utils.database import Base
 
+
 # =====================================================
 # WHO / OFFICIAL OUTBREAK REPORTS
 # =====================================================
 
 class WhoOutbreakReport(Base):
 
-    __tablename__ = "who_outbreak_reports"
+    __tablename__ = (
+        "who_outbreak_reports"
+    )
 
     # -------------------------------------------------
     # PRIMARY KEY
@@ -37,9 +40,21 @@ class WhoOutbreakReport(Base):
     )
 
     disease = Column(
+
         String,
+
         nullable=False,
+
         default="Unknown",
+    )
+
+    severity = Column(
+
+        String,
+
+        nullable=False,
+
+        default="LOW",
     )
 
     # -------------------------------------------------
@@ -52,8 +67,11 @@ class WhoOutbreakReport(Base):
     )
 
     country_iso2 = Column(
+
         String,
+
         nullable=True,
+
         index=True,
     )
 
@@ -67,8 +85,11 @@ class WhoOutbreakReport(Base):
     )
 
     url = Column(
+
         String,
+
         unique=True,
+
         nullable=False,
     )
 
@@ -82,6 +103,27 @@ class WhoOutbreakReport(Base):
     )
 
     ingested_at = Column(
+
         DateTime,
+
         default=datetime.utcnow,
     )
+
+
+# =====================================================
+# 🔥 COMPATIBILITY ALIAS
+# =====================================================
+# Some services import:
+#
+# from app.models.who_outbreaks import (
+#     WHOOutbreakReport
+# )
+#
+# while the real model class is:
+#
+# WhoOutbreakReport
+#
+# This alias prevents import errors.
+# =====================================================
+
+WHOOutbreakReport = WhoOutbreakReport

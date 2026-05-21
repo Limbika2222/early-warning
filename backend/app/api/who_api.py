@@ -14,6 +14,10 @@ from app.services.who_service import (
     fetch_who_outbreak_news,
 )
 
+from app.services.outbreak_storage import (
+    store_outbreak_reports,
+)
+
 from app.services.outbreak_risk_service import (
     get_outbreak_severity,
 )
@@ -331,3 +335,54 @@ def outbreak_disease_summary(
         "diseases":
             result,
     }
+
+# =====================================================
+# REFRESH WHO OUTBREAK DATA
+# =====================================================
+
+@router.post("/refresh")
+def refresh_outbreak_data():
+
+    try:
+
+        print(
+            "🌍 Refreshing outbreak intelligence..."
+        )
+
+        reports = (
+            fetch_who_outbreak_news()
+        )
+
+        stored = (
+            store_outbreak_reports(
+                reports
+            )
+        )
+
+        return {
+
+            "status":
+                "success",
+
+            "fetched":
+                len(reports),
+
+            "stored":
+                stored,
+        }
+
+    except Exception as e:
+
+        print(
+            "❌ WHO refresh failed:",
+            str(e)
+        )
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(e),
+        }

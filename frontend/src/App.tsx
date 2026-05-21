@@ -14,6 +14,7 @@ import UploadData from "./pages/UploadData"
 import NewDashboard from "./pages/NewDashboard"
 import WhoDashboard from "./pages/WhoDashboard"
 import RedditDashboard from "./pages/RedditDashboard"
+import PredictionsDashboard from "./pages/PredictionsDashboard"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -84,6 +85,16 @@ export default function App() {
             element={
               <DashboardProvider>
                 <WhoDashboard />
+              </DashboardProvider>
+            }
+          />
+          
+          {/* 📈 PREDICTIONS */}
+          <Route
+            path="/predictions"
+            element={
+              <DashboardProvider>
+                <PredictionsDashboard />
               </DashboardProvider>
             }
           />

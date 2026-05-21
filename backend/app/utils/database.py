@@ -1,69 +1,141 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+
+from sqlalchemy.orm import (
+    sessionmaker,
+    declarative_base,
+)
+
 from dotenv import load_dotenv
+
 from pathlib import Path
+
 import os
 
-# -------------------------------------------------
-# Load environment variables
-# -------------------------------------------------
+# =====================================================
+# LOAD ENVIRONMENT VARIABLES
+# =====================================================
+
 load_dotenv()
 
-# -------------------------------------------------
-# Resolve DB path (SAFE + SIMPLE)
-# -------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
+# =====================================================
+# BASE DIRECTORY
+# backend/
+# =====================================================
 
-DB_PATH = BASE_DIR / "early_warning.db"
+BASE_DIR = (
+    Path(__file__)
+    .resolve()
+    .parent
+    .parent
+    .parent
+)
 
-# -------------------------------------------------
-# Database URL
-# -------------------------------------------------
+# =====================================================
+# SQLITE DATABASE PATH
+# =====================================================
+
+DB_PATH = (
+    BASE_DIR
+    / "early_warning.db"
+)
+
+# =====================================================
+# DATABASE URL
+# =====================================================
+
 DATABASE_URL = os.getenv(
+
     "DATABASE_URL",
+
     f"sqlite:///{DB_PATH}"
 )
 
-# -------------------------------------------------
-# Engine config
-# -------------------------------------------------
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+# =====================================================
+# SQLITE CONFIG
+# =====================================================
+
+connect_args = (
+
+    {
+        "check_same_thread": False
+    }
+
+    if DATABASE_URL.startswith(
+        "sqlite"
+    )
+
+    else {}
+)
+
+# =====================================================
+# ENGINE
+# =====================================================
 
 engine = create_engine(
+
     DATABASE_URL,
+
     connect_args=connect_args,
+
     echo=False,
 )
 
-# -------------------------------------------------
-# Session
-# -------------------------------------------------
+# =====================================================
+# SESSION
+# =====================================================
+
 SessionLocal = sessionmaker(
+
     autocommit=False,
+
     autoflush=False,
+
     bind=engine,
 )
 
-# -------------------------------------------------
-# Base
-# -------------------------------------------------
+# =====================================================
+# BASE MODEL
+# =====================================================
+
 Base = declarative_base()
 
+# =====================================================
+# INIT DATABASE
+# =====================================================
 
-# =================================================
-# 🔥 AUTO-CREATE TABLES (CRITICAL FIX)
-# =================================================
 def init_db():
+
     """
-    Import all models and create tables
+    Register all models
+    and create tables
     """
-    import app.models.google_trends  # 🔥 IMPORTANT (register models)
 
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created")
+    # -------------------------------------------------
+    # IMPORT ALL MODELS
+    # -------------------------------------------------
 
+    import app.models.google_trends
 
-# -------------------------------------------------
-# 🔥 RUN ON STARTUP
-# -------------------------------------------------
+    import app.models.reddit_signal
+
+    import app.models.who_outbreaks
+
+    import app.models.alerts
+
+    # -------------------------------------------------
+    # CREATE TABLES
+    # -------------------------------------------------
+
+    Base.metadata.create_all(
+        bind=engine
+    )
+
+    print(
+        "✅ Database tables created"
+    )
+
+# =====================================================
+# AUTO INITIALIZE
+# =====================================================
+
 init_db()
