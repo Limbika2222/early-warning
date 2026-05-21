@@ -1,14 +1,6 @@
 # =====================================================
 # DISEASE MAPPER
 # =====================================================
-# Converts:
-#
-# symptoms / keywords
-#
-# INTO:
-#
-# probable diseases
-# =====================================================
 
 from collections import defaultdict
 
@@ -18,144 +10,77 @@ from collections import defaultdict
 
 DISEASE_RULES = {
 
-    # -------------------------------------------------
-    # DENGUE
-    # -------------------------------------------------
-
     "Dengue": [
 
         "fever",
-
         "joint pain",
-
         "rash",
-
         "skin rash",
-
         "dengue symptoms",
-
         "dengue fever",
-
         "rash dengue",
-
         "severe headache",
-
         "muscle aches",
     ],
-
-    # -------------------------------------------------
-    # INFLUENZA
-    # -------------------------------------------------
 
     "Influenza": [
 
         "influenza",
-
         "flu symptoms",
-
         "flu",
-
         "cough",
-
         "sore throat",
-
         "headache",
-
         "chills",
-
         "fatigue",
     ],
-
-    # -------------------------------------------------
-    # MALARIA
-    # -------------------------------------------------
 
     "Malaria": [
 
         "malaria",
-
         "fever",
-
         "night sweats",
-
         "shivering",
-
         "sweating",
-
         "fatigue",
-
         "headache",
     ],
-
-    # -------------------------------------------------
-    # COVID-19
-    # -------------------------------------------------
 
     "COVID-19": [
 
         "covid",
-
         "covid-19",
-
         "coronavirus",
-
         "fever",
-
         "cough",
-
         "fatigue",
-
         "headache",
-
         "sore throat",
-
         "flu symptoms",
     ],
-
-    # -------------------------------------------------
-    # MEASLES
-    # -------------------------------------------------
 
     "Measles": [
 
         "measles",
-
         "fever",
-
         "skin rash",
-
         "rash",
-
         "cough",
     ],
-
-    # -------------------------------------------------
-    # EBOLA
-    # -------------------------------------------------
 
     "Ebola": [
 
         "ebola",
-
         "bleeding",
-
         "vomiting",
-
         "hemorrhagic fever",
     ],
-
-    # -------------------------------------------------
-    # MPOX
-    # -------------------------------------------------
 
     "Mpox": [
 
         "mpox",
-
         "monkeypox",
-
         "skin lesions",
-
         "rash",
     ],
 }
@@ -178,10 +103,6 @@ def map_keyword_to_disease(
         .strip()
     )
 
-    # -------------------------------------------------
-    # MATCH
-    # -------------------------------------------------
-
     for (
         disease,
         keywords,
@@ -194,6 +115,47 @@ def map_keyword_to_disease(
                 return disease
 
     return "Unknown"
+
+# =====================================================
+# COUNTRY NORMALIZER
+# =====================================================
+
+def normalize_country(
+    value
+):
+
+    if not value:
+        return "GLOBAL"
+
+    value = str(value).strip()
+
+    mapping = {
+
+        "India": "IN",
+        "Malawi": "MW",
+        "South Africa": "ZA",
+        "United States": "US",
+        "Kenya": "KE",
+        "Nigeria": "NG",
+        "Tanzania": "TZ",
+        "Uganda": "UG",
+        "Ethiopia": "ET",
+
+        "IN": "IN",
+        "MW": "MW",
+        "ZA": "ZA",
+        "US": "US",
+        "KE": "KE",
+        "NG": "NG",
+        "TZ": "TZ",
+        "UG": "UG",
+        "ET": "ET",
+    }
+
+    return mapping.get(
+        value,
+        value
+    )
 
 # =====================================================
 # DISEASE INFERENCE
@@ -235,73 +197,87 @@ def infer_disease_scores(
 
     for item in predictions:
 
-        keyword = (
-
-            item.get(
-                "disease",
-                "",
-            )
-
-            .lower()
-
-            .strip()
+        disease = item.get(
+            "disease",
+            "Unknown",
         )
 
-        for (
-            disease,
-            symptom_list,
-        ) in DISEASE_RULES.items():
+        country = normalize_country(
 
-            matches = [
+            item.get(
+                "country",
+                "GLOBAL",
+            )
+        )
 
-                s.lower()
-                for s in symptom_list
-            ]
+        # ---------------------------------------------
+        # UNIQUE GEO-AWARE KEY
+        # ---------------------------------------------
 
-            if keyword in matches:
+        key = (
+            f"{disease}_{country}"
+        )
 
-                disease_scores[disease][
-                    "disease"
-                ] = disease
+        disease_scores[key][
+            "disease"
+        ] = disease
 
-                disease_scores[disease][
-                    "country"
-                ] = item.get(
-                    "country",
-                    "GLOBAL",
-                )
+        disease_scores[key][
+            "country"
+        ] = country
 
-                disease_scores[disease][
-                    "google_score"
-                ] += item.get(
-                    "google_score",
-                    0,
-                )
+        disease_scores[key][
+            "google_score"
+        ] += item.get(
+            "google_score",
+            0,
+        )
 
-                disease_scores[disease][
-                    "reddit_score"
-                ] += item.get(
-                    "reddit_score",
-                    0,
-                )
+        disease_scores[key][
+            "reddit_score"
+        ] += item.get(
+            "reddit_score",
+            0,
+        )
 
-                disease_scores[disease][
-                    "who_score"
-                ] += item.get(
-                    "who_score",
-                    0,
-                )
+        disease_scores[key][
+            "who_score"
+        ] += item.get(
+            "who_score",
+            0,
+        )
 
-                disease_scores[disease][
-                    "combined_score"
-                ] += item.get(
-                    "combined_score",
-                    0,
-                )
+        disease_scores[key][
+            "combined_score"
+        ] += item.get(
+            "combined_score",
+            0,
+        )
 
-                disease_scores[disease][
+        # ---------------------------------------------
+        # KEYWORDS
+        # ---------------------------------------------
+
+        for keyword in item.get(
+            "matched_keywords",
+            [],
+        ):
+
+            if (
+
+                keyword
+                not in
+                disease_scores[key][
                     "matched_keywords"
-                ].append(keyword)
+                ]
+
+            ):
+
+                disease_scores[key][
+                    "matched_keywords"
+                ].append(
+                    keyword
+                )
 
     # =================================================
     # FINALIZE
@@ -317,15 +293,22 @@ def infer_disease_scores(
             "combined_score"
         ]
 
-        # -------------------------------------------------
-        # RISK LABEL
-        # -------------------------------------------------
+        # ---------------------------------------------
+        # MINIMUM OUTBREAK THRESHOLD
+        # ---------------------------------------------
 
-        if score >= 1000:
+        if score < 500:
+            continue
+
+        # ---------------------------------------------
+        # RISK LABEL
+        # ---------------------------------------------
+
+        if score >= 3000:
 
             risk = "HIGH"
 
-        elif score >= 200:
+        elif score >= 1000:
 
             risk = "MEDIUM"
 
@@ -337,9 +320,9 @@ def infer_disease_scores(
             "risk_level"
         ] = risk
 
-        # -------------------------------------------------
+        # ---------------------------------------------
         # REMOVE DUPLICATES
-        # -------------------------------------------------
+        # ---------------------------------------------
 
         item[
             "matched_keywords"

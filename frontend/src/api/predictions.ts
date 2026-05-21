@@ -45,6 +45,8 @@ export interface SeasonalityResult {
 
   top_months: string[]
 
+  secondary_peaks: string[]
+
   seasonality_strength: number
 
   seasonal_risk: string

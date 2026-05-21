@@ -28,7 +28,6 @@ except Exception:
 
     RedditSignal = None
 
-
 # =====================================================
 # SAFE ATTRIBUTE ACCESS
 # =====================================================
@@ -47,7 +46,6 @@ def safe_getattr(
 
         return default
 
-
 # =====================================================
 # RISK LABEL
 # =====================================================
@@ -63,7 +61,6 @@ def calculate_risk_level(
         return "MEDIUM"
 
     return "LOW"
-
 
 # =====================================================
 # FEATURE BUILDER
@@ -151,15 +148,11 @@ def build_prediction_features(
                 keyword_text
             )
 
-            key = disease.lower()
-
-            features[key][
-                "disease"
-            ] = disease
-
             # -----------------------------------------
             # COUNTRY
             # -----------------------------------------
+
+            country = "GLOBAL"
 
             country_obj = safe_getattr(
                 row,
@@ -174,10 +167,24 @@ def build_prediction_features(
                 )
 
                 if iso2:
+                    country = iso2
 
-                    features[key][
-                        "country"
-                    ] = iso2
+            # -----------------------------------------
+            # UNIQUE KEY
+            # -----------------------------------------
+
+            key = (
+                f"{disease.lower()}_"
+                f"{country}"
+            )
+
+            features[key][
+                "disease"
+            ] = disease
+
+            features[key][
+                "country"
+            ] = country
 
             # -----------------------------------------
             # INTEREST SCORE
@@ -253,11 +260,32 @@ def build_prediction_features(
                 if not disease:
                     continue
 
-                key = disease.lower()
+                # -------------------------------------
+                # COUNTRY
+                # -------------------------------------
+
+                country = safe_getattr(
+                    row,
+                    "country_iso2",
+                    "GLOBAL",
+                )
+
+                # -------------------------------------
+                # UNIQUE KEY
+                # -------------------------------------
+
+                key = (
+                    f"{disease.lower()}_"
+                    f"{country}"
+                )
 
                 features[key][
                     "disease"
                 ] = disease
+
+                features[key][
+                    "country"
+                ] = country
 
                 # -------------------------------------
                 # SIGNAL STRENGTH
@@ -314,26 +342,32 @@ def build_prediction_features(
             ):
                 continue
 
-            key = disease.lower()
+            # -----------------------------------------
+            # COUNTRY
+            # -----------------------------------------
+
+            country = safe_getattr(
+                row,
+                "country_iso2",
+                "GLOBAL",
+            )
+
+            # -----------------------------------------
+            # UNIQUE KEY
+            # -----------------------------------------
+
+            key = (
+                f"{disease.lower()}_"
+                f"{country}"
+            )
 
             features[key][
                 "disease"
             ] = disease
 
-            # -----------------------------------------
-            # COUNTRY
-            # -----------------------------------------
-
-            iso2 = safe_getattr(
-                row,
-                "country_iso2",
-            )
-
-            if iso2:
-
-                features[key][
-                    "country"
-                ] = iso2
+            features[key][
+                "country"
+            ] = country
 
             # -----------------------------------------
             # WHO SEVERITY
@@ -388,6 +422,13 @@ def build_prediction_features(
 
             + item["who_score"]
         )
+
+        # ---------------------------------------------
+        # SKIP EMPTY SIGNALS
+        # ---------------------------------------------
+
+        if combined <= 0:
+            continue
 
         item[
             "combined_score"
