@@ -28,3 +28,4 @@ beautifulsoup4
 feedparser
 firebase-admin
 gunicorn 
+python-dotenv

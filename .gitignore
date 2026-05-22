@@ -1,4 +1,34 @@
-*.json
-node_modules
-# Firebase Admin SDK
-app/firebase/*.json
+# =========================
+# ENV FILES
+# =========================
+
+.env
+backend/.env
+frontend/.env
+
+# =========================
+# FIREBASE SECRETS
+# =========================
+
+backend/app/firebase/*.json
+
+# =========================
+# PYTHON
+# =========================
+
+venv/
+__pycache__/
+*.pyc
+
+# =========================
+# NODE
+# =========================
+
+node_modules/
+dist/
+
+# =========================
+# MACOS
+# =========================
+
+.DS_Store
