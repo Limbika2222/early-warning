@@ -15,6 +15,7 @@ import NewDashboard from "./pages/NewDashboard"
 import WhoDashboard from "./pages/WhoDashboard"
 import RedditDashboard from "./pages/RedditDashboard"
 import PredictionsDashboard from "./pages/PredictionsDashboard"
+import Settings from "./pages/Settings"
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -101,6 +102,9 @@ export default function App() {
 
           {/* 📤 UPLOAD */}
           <Route path="/upload" element={<UploadData />} />
+          
+          {/* ⚙️ SETTINGS */}
+          <Route path="/settings" element={<Settings />} />
 
         </Route>
 

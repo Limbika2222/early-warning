@@ -27,6 +27,10 @@ from app.api.ranking_api import (
     router as ranking_router,
 )
 
+from app.api.admin_api import (
+    router as admin_router
+)
+
 # -------------------------------------------------
 # Reddit Signal API
 # -------------------------------------------------
@@ -179,6 +183,10 @@ app.include_router(
     prefix="/api/ranking",
 
     tags=["Ranking"],
+)
+
+app.include_router(
+    admin_router
 )
 
 # =====================================================
