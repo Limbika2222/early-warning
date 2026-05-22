@@ -26,3 +26,5 @@ urllib3==2.6.3
 uvicorn==0.41.0
 beautifulsoup4
 feedparser
+firebase-admin
+gunicorn 
