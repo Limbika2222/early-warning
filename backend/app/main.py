@@ -126,11 +126,7 @@ app.include_router(
 # -------------------------------------------------
 
 app.include_router(
-    reddit_router,
-
-    prefix="/api",
-
-    tags=["Reddit"],
+    reddit_router
 )
 
 # -------------------------------------------------

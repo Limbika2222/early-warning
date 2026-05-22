@@ -2,16 +2,21 @@ import firebase_admin
 
 from firebase_admin import (
     credentials,
-    auth,
     firestore,
 )
 
 # =====================================================
-# FIREBASE INIT
+# FIREBASE ADMIN INITIALIZATION
 # =====================================================
 
-cred = credentials.Certificate(
+SERVICE_ACCOUNT_PATH = (
+
+    "app/firebase/"
     "early-warning-dashboard-firebase-adminsdk-fbsvc-e971b35079.json"
+)
+
+cred = credentials.Certificate(
+    SERVICE_ACCOUNT_PATH
 )
 
 if not firebase_admin._apps:
@@ -24,12 +29,8 @@ if not firebase_admin._apps:
 # FIRESTORE
 # =====================================================
 
-firestore_db = firestore.client(
-    database_id="users"
+firestore_db = firestore.client()
+
+print(
+    "🔥 Firebase Admin Initialized"
 )
-
-# =====================================================
-# EXPORTS
-# =====================================================
-
-firebase_auth = auth
