@@ -5,8 +5,6 @@ from fastapi import (
 
 from pydantic import BaseModel
 
-from firebase_admin import auth
-
 from app.services.admin.user_service import (
 
     create_sub_admin,
@@ -18,6 +16,10 @@ from app.services.admin.user_service import (
     enable_sub_admin,
 
     delete_sub_admin,
+)
+
+from app.services.email_service import (
+    send_email
 )
 
 # =====================================================
@@ -135,7 +137,7 @@ def get_users():
     "/disable/{uid}"
 )
 def disable_user(
-    uid: str
+    uid: int
 ):
 
     try:
@@ -171,7 +173,7 @@ def disable_user(
     "/enable/{uid}"
 )
 def enable_user(
-    uid: str
+    uid: int
 ):
 
     try:
@@ -207,7 +209,7 @@ def enable_user(
     "/delete/{uid}"
 )
 def delete_user(
-    uid: str
+    uid: int
 ):
 
     try:
@@ -236,7 +238,7 @@ def delete_user(
         )
 
 # =====================================================
-# SEND PASSWORD RESET EMAIL
+# RESET PASSWORD EMAIL
 # =====================================================
 
 @router.post(
@@ -249,13 +251,16 @@ def reset_password(
 
     try:
 
-        # -------------------------------------------------
-        # FIREBASE RESET EMAIL
-        # -------------------------------------------------
+        send_email(
 
-        auth.generate_password_reset_link(
+            to_email=payload.email,
 
-            payload.email
+            subject="Password Reset",
+
+            body="""
+Please contact the administrator
+to reset your password.
+""",
         )
 
         return {

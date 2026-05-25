@@ -1,48 +1,47 @@
-// src/services/userService.ts
-import {
-  sendPasswordResetEmail,
-} from "firebase/auth"
-import { auth } from "../firebase"
-
-// =====================================================
-// API BASE
-// =====================================================
-
 const API_BASE =
-  import.meta.env.VITE_API_BASE
+  "https://8000-firebase-early-warning-1772198111524.cluster-fdkw7vjj7bgguspe3fbbc25tra.cloudworkstations.dev"
 
 // =====================================================
 // TYPES
 // =====================================================
 
-export interface CreateUserPayload {
+export interface User {
+
+  id: number
+
   name: string
+
   email: string
-  gender: string
-  dob: string
-}
 
-// =====================================================
-
-export interface UserResponse {
-  success?: boolean
-  message?: string
-  uid?: string
-  email?: string
-  reset_link?: string
-}
-
-// =====================================================
-
-export interface AdminUser {
-  uid: string
-  name: string
-  email: string
-  gender: string
-  dob: string
   role: string
+
   is_active: boolean
-  created_at?: string
+}
+
+// =====================================================
+// GET USERS
+// =====================================================
+
+export async function getUsers():
+
+Promise<User[]> {
+
+  const response = await fetch(
+
+    `${API_BASE}/api/admin/users`
+  )
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Failed to fetch users"
+    )
+  }
+
+  const data =
+    await response.json()
+
+  return data.users
 }
 
 // =====================================================
@@ -50,81 +49,50 @@ export interface AdminUser {
 // =====================================================
 
 export async function createSubAdmin(
-  payload: CreateUserPayload
-): Promise<UserResponse> {
+
+  payload: {
+
+    name: string
+
+    email: string
+
+    gender: string
+
+    dob: string
+  }
+) {
+
   const response = await fetch(
+
     `${API_BASE}/api/admin/create-user`,
+
     {
+
       method: "POST",
+
       headers: {
-        "Content-Type": "application/json",
+
+        "Content-Type":
+          "application/json",
       },
-      body: JSON.stringify(payload),
+
+      body: JSON.stringify(
+        payload
+      ),
     }
   )
 
-  const data = await response.json()
-
   if (!response.ok) {
+
+    const error =
+      await response.json()
+
     throw new Error(
-      data.detail || "Failed to create user"
+
+      error.detail ||
+
+      "Failed to create user"
     )
-  }
-
-  return data
-}
-
-// =====================================================
-// GET ALL USERS
-// =====================================================
-
-export async function getUsers(): Promise<AdminUser[]> {
-  const response = await fetch(
-    `${API_BASE}/api/admin/users`
-  )
-
-  const data = await response.json()
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch users")
-  }
-
-  return data.users || []
-}
-
-// =====================================================
-// DISABLE USER
-// =====================================================
-
-export async function disableUser(uid: string) {
-  const response = await fetch(
-    `${API_BASE}/api/admin/disable/${uid}`,
-    {
-      method: "PATCH",
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error("Failed to disable user")
-  }
-
-  return response.json()
-}
-
-// =====================================================
-// ENABLE USER
-// =====================================================
-
-export async function enableUser(uid: string) {
-  const response = await fetch(
-    `${API_BASE}/api/admin/enable/${uid}`,
-    {
-      method: "PATCH",
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error("Failed to enable user")
   }
 
   return response.json()
@@ -134,53 +102,118 @@ export async function enableUser(uid: string) {
 // DELETE USER
 // =====================================================
 
-export async function deleteUser(uid: string) {
+export async function deleteUser(
+  userId: number
+) {
+
   const response = await fetch(
-    `${API_BASE}/api/admin/delete/${uid}`,
+
+    `${API_BASE}/api/admin/delete/${userId}`,
+
     {
       method: "DELETE",
     }
   )
 
   if (!response.ok) {
-    throw new Error("Failed to delete user")
+
+    throw new Error(
+      "Failed to delete user"
+    )
   }
 
   return response.json()
 }
 
 // =====================================================
-// SEND PASSWORD RESET EMAIL
+// DISABLE USER
+// =====================================================
+
+export async function disableUser(
+  userId: number
+) {
+
+  const response = await fetch(
+
+    `${API_BASE}/api/admin/disable/${userId}`,
+
+    {
+      method: "PATCH",
+    }
+  )
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Failed to disable user"
+    )
+  }
+
+  return response.json()
+}
+
+// =====================================================
+// ENABLE USER
+// =====================================================
+
+export async function enableUser(
+  userId: number
+) {
+
+  const response = await fetch(
+
+    `${API_BASE}/api/admin/enable/${userId}`,
+
+    {
+      method: "PATCH",
+    }
+  )
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Failed to enable user"
+    )
+  }
+
+  return response.json()
+}
+
+// =====================================================
+// SEND RESET EMAIL
 // =====================================================
 
 export async function sendResetEmail(
   email: string
 ) {
 
-  try {
+  const response = await fetch(
 
-    await sendPasswordResetEmail(
+    `${API_BASE}/api/admin/reset-password`,
 
-      auth,
+    {
 
-      email
-    )
+      method: "POST",
 
-    return {
+      headers: {
 
-      success: true,
+        "Content-Type":
+          "application/json",
+      },
 
-      message:
-        "Password reset email sent",
+      body: JSON.stringify({
+
+        email,
+      }),
     }
+  )
 
-  } catch (error) {
+  if (!response.ok) {
 
-    console.error(
-      "RESET EMAIL ERROR:",
-      error
+    throw new Error(
+      "Failed to send reset email"
     )
-
-    throw error
   }
+
+  return response.json()
 }

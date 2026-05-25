@@ -31,6 +31,8 @@ from app.api.admin_api import (
     router as admin_router
 )
 
+from app.api.auth_api import router as auth_router
+
 # -------------------------------------------------
 # Reddit Signal API
 # -------------------------------------------------
@@ -55,16 +57,16 @@ from app.api.prediction_api import (
     router as prediction_router,
 )
 
+
+
 # =====================================================
 # CREATE FASTAPI APPLICATION
 # =====================================================
 
 app = FastAPI(
 
-    title=(
-        "Infodemiology Early "
-        "Warning System API"
-    ),
+    title=("Infodemiology Early "
+        "Warning System API"),
 
     version="2.7.0",
 )
@@ -185,6 +187,8 @@ app.include_router(
     admin_router
 )
 
+app.include_router(auth_router)
+
 # =====================================================
 # ROOT
 # =====================================================
@@ -235,3 +239,7 @@ def health_check():
             "prediction_engine": True,
         },
     }
+
+from app.utils.database import Base, engine
+
+Base.metadata.create_all(bind=engine)

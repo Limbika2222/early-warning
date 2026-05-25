@@ -1,14 +1,5 @@
 "use client"
 
-import { signOut } from "firebase/auth"
-
-import { auth } from "../../firebase"
-
-import {
-  useEffect,
-  useState,
-} from "react"
-
 // =====================================================
 // TYPES
 // =====================================================
@@ -29,73 +20,42 @@ export default function Header({
 }: HeaderProps) {
 
   // ===================================================
-  // STATE
+  // USER DATA
   // ===================================================
 
-  const [userName, setUserName] =
-    useState("Administrator")
+  const storedUser =
+    localStorage.getItem(
+      "user"
+    )
 
-  const [userEmail, setUserEmail] =
-    useState("")
+  const parsedUser =
+    storedUser
+      ? JSON.parse(storedUser)
+      : null
 
-  const [photoURL, setPhotoURL] =
-    useState("")
+  const userName =
+    parsedUser?.name ||
+    "Administrator"
 
-  // ===================================================
-  // LOAD AUTH USER
-  // ===================================================
-
-  useEffect(() => {
-
-    const unsubscribe =
-      auth.onAuthStateChanged(
-
-        (user) => {
-
-          if (user) {
-
-            setUserName(
-
-              user.displayName ||
-
-              "Administrator"
-            )
-
-            setUserEmail(
-
-              user.email || ""
-            )
-
-            setPhotoURL(
-
-              user.photoURL || ""
-            )
-          }
-        }
-      )
-
-    return () =>
-      unsubscribe()
-
-  }, [])
+  const userEmail =
+    parsedUser?.email || ""
 
   // ===================================================
   // LOGOUT
   // ===================================================
 
-  async function handleLogout() {
+  function handleLogout() {
 
-    try {
+    localStorage.removeItem(
+      "token"
+    )
 
-      await signOut(auth)
+    localStorage.removeItem(
+      "user"
+    )
 
-    } catch (error) {
-
-      console.error(
-        "Logout Error:",
-        error
-      )
-    }
+    // Reload app completely
+    window.location.reload()
   }
 
   // ===================================================
@@ -190,40 +150,23 @@ export default function Header({
 
         {/* AVATAR */}
 
-        {photoURL ? (
+        <div
+          className="
+            w-9
+            h-9
+            rounded-full
+            bg-indigo-100
+            flex
+            items-center
+            justify-center
+            text-indigo-700
+            font-semibold
+          "
+        >
 
-          <img
-            src={photoURL}
-            alt="User"
-            className="
-              w-9
-              h-9
-              rounded-full
-              border
-              object-cover
-            "
-          />
+          {userName.charAt(0)}
 
-        ) : (
-
-          <div
-            className="
-              w-9
-              h-9
-              rounded-full
-              bg-indigo-100
-              flex
-              items-center
-              justify-center
-              text-indigo-700
-              font-semibold
-            "
-          >
-
-            {userName.charAt(0)}
-
-          </div>
-        )}
+        </div>
 
         {/* LOGOUT */}
 

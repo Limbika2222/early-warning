@@ -1,66 +1,97 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom"
-import { onAuthStateChanged } from "firebase/auth"
-import type { User } from "firebase/auth"
+import {
+  HashRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom"
 
-import { auth } from "./firebase"
+import {
+  useState,
+} from "react"
+
 import { DashboardProvider } from "./context/DashboardContext"
 
 import AppLayout from "./components/layout/AppLayout"
+
 import Login from "./pages/Login"
+
 import UploadData from "./pages/UploadData"
+
 import NewDashboard from "./pages/NewDashboard"
+
 import WhoDashboard from "./pages/WhoDashboard"
+
 import RedditDashboard from "./pages/RedditDashboard"
+
 import PredictionsDashboard from "./pages/PredictionsDashboard"
+
 import Settings from "./pages/Settings"
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser)
-      setLoading(false)
-    })
-    return unsub
-  }, [])
+  // ===================================================
+  // AUTH STATE
+  // ===================================================
 
-  // 🔄 Loading Screen
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700">
-        <div className="text-center">
-          <div className="animate-pulse text-white text-2xl font-semibold">
-            Infodemiology Intelligence Platform
-          </div>
-          <p className="text-blue-100 mt-2 text-sm">
-            Initializing Early Warning System…
-          </p>
-        </div>
-      </div>
+  const [authenticated,
+    setAuthenticated] =
+    useState(
+
+      !!localStorage.getItem(
+        "token"
+      )
     )
+
+  // ===================================================
+  // LOGIN SUCCESS
+  // ===================================================
+
+  function handleLoginSuccess() {
+
+    setAuthenticated(true)
   }
 
+  // ===================================================
+  // ROUTES
+  // ===================================================
+
   return (
+
     <HashRouter>
+
       <Routes>
 
-        {/* ---------------- PUBLIC ---------------- */}
+        {/* ---------------- LOGIN ---------------- */}
+
         <Route
           path="/login"
-          element={user ? <Navigate to="/" /> : <Login />}
+          element={
+            authenticated
+              ? <Navigate to="/" />
+              : (
+                <Login
+                  onLoginSuccess={
+                    handleLoginSuccess
+                  }
+                />
+              )
+          }
         />
 
         {/* ---------------- PROTECTED ---------------- */}
+
         <Route
-          element={user ? <AppLayout /> : <Navigate to="/login" />}
+          element={
+            authenticated
+              ? <AppLayout />
+              : <Navigate to="/login" />
+          }
         >
 
           {/* 🟢 GOOGLE */}
+
           <Route
             path="/"
             element={
@@ -71,6 +102,7 @@ export default function App() {
           />
 
           {/* 🔵 REDDIT */}
+
           <Route
             path="/reddit"
             element={
@@ -81,6 +113,7 @@ export default function App() {
           />
 
           {/* 🟣 WHO */}
+
           <Route
             path="/who"
             element={
@@ -89,8 +122,9 @@ export default function App() {
               </DashboardProvider>
             }
           />
-          
+
           {/* 📈 PREDICTIONS */}
+
           <Route
             path="/predictions"
             element={
@@ -101,17 +135,30 @@ export default function App() {
           />
 
           {/* 📤 UPLOAD */}
-          <Route path="/upload" element={<UploadData />} />
-          
+
+          <Route
+            path="/upload"
+            element={<UploadData />}
+          />
+
           {/* ⚙️ SETTINGS */}
-          <Route path="/settings" element={<Settings />} />
+
+          <Route
+            path="/settings"
+            element={<Settings />}
+          />
 
         </Route>
 
         {/* ---------------- FALLBACK ---------------- */}
-        <Route path="*" element={<Navigate to="/" />} />
+
+        <Route
+          path="*"
+          element={<Navigate to="/" />}
+        />
 
       </Routes>
+
     </HashRouter>
   )
 }

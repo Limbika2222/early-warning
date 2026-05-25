@@ -21,7 +21,7 @@ import {
 
 export interface AdminUser {
 
-  uid: string
+  id: number
 
   name: string
 
@@ -66,12 +66,12 @@ export default function UserTable({
   // ===================================================
 
   async function disableUser(
-    uid: string
+    id: number
   ) {
 
     try {
 
-      await disableUserService(uid)
+      await disableUserService(id)
 
       refreshUsers()
 
@@ -82,12 +82,12 @@ export default function UserTable({
   }
 
   async function enableUser(
-    uid: string
+    id: number
   ) {
 
     try {
 
-      await enableUserService(uid)
+      await enableUserService(id)
 
       refreshUsers()
 
@@ -98,7 +98,7 @@ export default function UserTable({
   }
 
   async function deleteUser(
-    uid: string
+    id: number
   ) {
 
     const confirmed =
@@ -110,7 +110,7 @@ export default function UserTable({
 
     try {
 
-      await deleteUserService(uid)
+      await deleteUserService(id)
 
       refreshUsers()
 
@@ -341,7 +341,7 @@ export default function UserTable({
             {users.map((user) => (
 
               <tr
-                key={user.uid}
+                key={user.id}
                 className="
                   border-t
                   hover:bg-gray-50
@@ -542,7 +542,7 @@ export default function UserTable({
                       <button
                         onClick={() =>
                           disableUser(
-                            user.uid
+                            user.id
                           )
                         }
                         className="
@@ -571,7 +571,7 @@ export default function UserTable({
                       <button
                         onClick={() =>
                           enableUser(
-                            user.uid
+                            user.id
                           )
                         }
                         className="
@@ -602,7 +602,7 @@ export default function UserTable({
                     <button
                       onClick={() =>
                         deleteUser(
-                          user.uid
+                          user.id
                         )
                       }
                       className="

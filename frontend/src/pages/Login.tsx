@@ -1,66 +1,228 @@
 import { useState } from "react"
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { auth } from "../firebase"
 
-export default function Login() {
-  const [email, setEmail] = useState<string>("")
-  const [password, setPassword] = useState<string>("")
-  const [error, setError] = useState<string>("")
-  const [loading, setLoading] = useState<boolean>(false)
+import { loginUser } from "../api/auth"
 
-  const handleLogin = async (): Promise<void> => {
-    setError("")
-    setLoading(true)
+// =====================================================
+// TYPES
+// =====================================================
+
+interface LoginProps {
+
+  onLoginSuccess: () => void
+}
+
+// =====================================================
+// COMPONENT
+// =====================================================
+
+export default function Login({
+
+  onLoginSuccess,
+
+}: LoginProps) {
+
+  const [email, setEmail] =
+    useState("")
+
+  const [password, setPassword] =
+    useState("")
+
+  const [error, setError] =
+    useState("")
+
+  const [loading, setLoading] =
+    useState(false)
+
+  // ===================================================
+  // LOGIN
+  // ===================================================
+
+  async function handleLogin(
+    e: React.FormEvent
+  ) {
+
+    e.preventDefault()
 
     try {
-      await signInWithEmailAndPassword(auth, email, password)
-      // onAuthStateChanged in App.tsx will handle redirect
-    } catch {
-      setError("Invalid email or password")
+
+      setLoading(true)
+
+      setError("")
+
+      const result =
+        await loginUser(
+
+          email,
+
+          password
+        )
+
+      // ===============================================
+      // SAVE TOKEN
+      // ===============================================
+
+      localStorage.setItem(
+
+        "token",
+
+        result.access_token
+      )
+
+      localStorage.setItem(
+
+        "user",
+
+        JSON.stringify(
+          result.user
+        )
+      )
+
+      console.log(
+        "✅ Login success"
+      )
+
+      // ===============================================
+      // UPDATE APP STATE
+      // ===============================================
+
+      onLoginSuccess()
+
+    } catch (err: unknown) {
+
+      console.error(
+        "❌ Login error:",
+        err
+      )
+
+      if (err instanceof Error) {
+
+        setError(err.message)
+
+      } else {
+
+        setError(
+          "Login failed"
+        )
+      }
+
     } finally {
+
       setLoading(false)
     }
   }
 
+  // ===================================================
+  // UI
+  // ===================================================
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-6 rounded shadow w-96">
-        <h2 className="text-xl font-semibold mb-4 text-center">
+
+    <div
+      className="
+        min-h-screen
+        flex
+        items-center
+        justify-center
+        bg-gray-100
+      "
+    >
+
+      <form
+        onSubmit={handleLogin}
+        className="
+          bg-white
+          p-8
+          rounded-xl
+          shadow-md
+          w-full
+          max-w-md
+        "
+      >
+
+        <h1
+          className="
+            text-3xl
+            font-bold
+            mb-6
+            text-center
+          "
+        >
           Early Warning Dashboard
-        </h2>
+        </h1>
 
         {error && (
-          <p className="text-red-600 text-sm mb-3 text-center">
+
+          <div
+            className="
+              mb-4
+              text-red-500
+              text-sm
+            "
+          >
             {error}
-          </p>
+          </div>
         )}
 
         <input
           type="email"
           placeholder="Email"
-          className="w-full border p-2 mb-3 rounded"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
+          onChange={(e) =>
+            setEmail(
+              e.target.value
+            )
+          }
+          className="
+            w-full
+            border
+            p-3
+            rounded-lg
+            mb-4
+          "
+          required
         />
 
         <input
           type="password"
           placeholder="Password"
-          className="w-full border p-2 mb-4 rounded"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
+          onChange={(e) =>
+            setPassword(
+              e.target.value
+            )
+          }
+          className="
+            w-full
+            border
+            p-3
+            rounded-lg
+            mb-6
+          "
+          required
         />
 
         <button
-          onClick={handleLogin}
+          type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-60"
+          className="
+            w-full
+            bg-blue-600
+            hover:bg-blue-700
+            text-white
+            p-3
+            rounded-lg
+            disabled:opacity-50
+          "
         >
-          {loading ? "Signing in..." : "Sign In"}
+
+          {loading
+            ? "Signing in..."
+            : "Sign In"}
+
         </button>
-      </div>
+
+      </form>
+
     </div>
   )
 }

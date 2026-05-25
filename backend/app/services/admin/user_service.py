@@ -1,358 +1,187 @@
-from firebase_admin import auth
+import random
+import string
 
-from datetime import datetime
+from app.models.user import User
 
-from app.firebase.firebase_admin import (
-    firestore_db,
+from app.utils.database import SessionLocal
+
+from app.services.auth_service import (
+    hash_password
 )
 
-# =====================================================
-# CREATE SUB ADMIN
-# =====================================================
+from app.services.email_service import (
+    send_email
+)
+
+
+def generate_password():
+
+    return ''.join(
+        random.choices(
+            string.ascii_letters + string.digits,
+            k=10
+        )
+    )
+
 
 def create_sub_admin(
+
     name: str,
+
     email: str,
+
     gender: str,
+
     dob: str,
 ):
 
-    # -------------------------------------------------
-    # CHECK IF USER ALREADY EXISTS
-    # -------------------------------------------------
+    db = SessionLocal()
 
-    try:
+    existing = db.query(User).filter(
+        User.email == email
+    ).first()
 
-        existing_user = auth.get_user_by_email(
-            email
+    if existing:
+
+        raise Exception(
+            "User already exists"
         )
 
-        return {
-            "success": False,
-            "message": "User already exists",
-            "uid": existing_user.uid,
-            "email": email,
-        }
+    password = generate_password()
 
-    except:
-
-        pass
-
-    # -------------------------------------------------
-    # TEMP PASSWORD
-    # -------------------------------------------------
-
-    temporary_password = (
-        "TempPassword123!"
+    hashed_password = hash_password(
+        password
     )
 
-    # -------------------------------------------------
-    # CREATE FIREBASE AUTH USER
-    # -------------------------------------------------
+    user = User(
 
-    user = auth.create_user(
+        name=name,
+
         email=email,
-        password=temporary_password,
-        display_name=name,
-        email_verified=False,
-        disabled=False,
+
+        password=hashed_password,
+
+        role="sub_admin",
+
+        is_active=True,
     )
 
-    # -------------------------------------------------
-    # SAVE USER PROFILE TO FIRESTORE
-    # -------------------------------------------------
+    db.add(user)
 
-    firestore_db.collection(
-        "users"
-    ).document(
-        user.uid
-    ).set({
+    db.commit()
 
-        "uid":
-            user.uid,
+    db.refresh(user)
 
-        "name":
-            name,
+    body = f"""
+Hello {name},
 
-        "email":
-            email,
+Your Infodemiology account has been created.
 
-        "gender":
-            gender,
+Email: {email}
 
-        "dob":
-            dob,
+Password: {password}
 
-        "role":
-            "sub_admin",
+Please login and change your password.
+"""
 
-        "is_active":
-            True,
+    send_email(
 
-        "created_at":
-            datetime.utcnow(),
+        to_email=email,
 
-        "last_login":
-            None,
-    })
+        subject="Infodemiology Account",
 
-    # -------------------------------------------------
-    # GENERATE PASSWORD RESET LINK
-    # -------------------------------------------------
-
-    reset_link = (
-        auth.generate_password_reset_link(
-            email
-        )
+        body=body,
     )
-
-    # -------------------------------------------------
-    # RESPONSE
-    # -------------------------------------------------
 
     return {
 
-        "success":
-            True,
+        "id": user.id,
 
-        "message":
-            "Sub admin created successfully",
+        "name": user.name,
 
-        "uid":
-            user.uid,
+        "email": user.email,
 
-        "name":
-            name,
-
-        "email":
-            email,
-
-        "gender":
-            gender,
-
-        "dob":
-            dob,
-
-        "temporary_password":
-            temporary_password,
-
-        "reset_link":
-            reset_link,
+        "role": user.role,
     }
 
-
-# =====================================================
-# GET ALL SUB ADMINS
-# =====================================================
 
 def get_all_sub_admins():
 
-    users_ref = firestore_db.collection(
-        "users"
-    )
+    db = SessionLocal()
 
-    docs = users_ref.stream()
+    users = db.query(User).all()
 
-    users = []
+    return [
 
-    for doc in docs:
+        {
 
-        data = doc.to_dict()
+            "id": u.id,
 
-        users.append({
+            "name": u.name,
 
-            "uid":
-                data.get("uid"),
+            "email": u.email,
 
-            "name":
-                data.get("name"),
+            "role": u.role,
 
-            "email":
-                data.get("email"),
+            "is_active": u.is_active,
+        }
 
-            "gender":
-                data.get("gender"),
-
-            "dob":
-                data.get("dob"),
-
-            "role":
-                data.get("role"),
-
-            "is_active":
-                data.get("is_active"),
-
-            "created_at":
-                str(
-                    data.get("created_at")
-                ),
-        })
-
-    return users
+        for u in users
+    ]
 
 
-# =====================================================
-# UPDATE SUB ADMIN
-# =====================================================
+def disable_sub_admin(user_id: int):
 
-def update_sub_admin(
-    uid: str,
-    name: str,
-    gender: str,
-    dob: str,
-):
+    db = SessionLocal()
 
-    firestore_db.collection(
-        "users"
-    ).document(
-        uid
-    ).update({
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
-        "name":
-            name,
+    if not user:
 
-        "gender":
-            gender,
+        raise Exception("User not found")
 
-        "dob":
-            dob,
-    })
+    user.is_active = False
 
-    return {
-        "success": True,
-        "message": "User updated successfully",
-    }
+    db.commit()
+
+    return {"status": "disabled"}
 
 
-# =====================================================
-# DISABLE SUB ADMIN
-# =====================================================
+def enable_sub_admin(user_id: int):
 
-def disable_sub_admin(
-    uid: str,
-):
+    db = SessionLocal()
 
-    auth.update_user(
-        uid,
-        disabled=True,
-    )
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
-    firestore_db.collection(
-        "users"
-    ).document(
-        uid
-    ).update({
+    if not user:
 
-        "is_active":
-            False,
-    })
+        raise Exception("User not found")
 
-    return {
-        "success": True,
-        "message": "User disabled successfully",
-    }
+    user.is_active = True
+
+    db.commit()
+
+    return {"status": "enabled"}
 
 
-# =====================================================
-# ENABLE SUB ADMIN
-# =====================================================
+def delete_sub_admin(user_id: int):
 
-def enable_sub_admin(
-    uid: str,
-):
+    db = SessionLocal()
 
-    auth.update_user(
-        uid,
-        disabled=False,
-    )
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
-    firestore_db.collection(
-        "users"
-    ).document(
-        uid
-    ).update({
+    if not user:
 
-        "is_active":
-            True,
-    })
+        raise Exception("User not found")
 
-    return {
-        "success": True,
-        "message": "User enabled successfully",
-    }
+    db.delete(user)
 
+    db.commit()
 
-# =====================================================
-# DELETE SUB ADMIN
-# =====================================================
-
-def delete_sub_admin(
-    uid: str,
-):
-
-    try:
-
-        # ---------------------------------------------
-        # DELETE FIREBASE AUTH USER
-        # ---------------------------------------------
-
-        auth.delete_user(uid)
-
-    except Exception as e:
-
-        print(
-            "AUTH DELETE ERROR:",
-            str(e)
-        )
-
-    try:
-
-        # ---------------------------------------------
-        # DELETE FIRESTORE DOCUMENT
-        # ---------------------------------------------
-
-        firestore_db.collection(
-            "users"
-        ).document(
-            uid
-        ).delete()
-
-    except Exception as e:
-
-        print(
-            "FIRESTORE DELETE ERROR:",
-            str(e)
-        )
-
-    return {
-
-        "success": True,
-
-        "message":
-            "User deleted successfully",
-    }
-
-# =====================================================
-# SEND PASSWORD RESET
-# =====================================================
-
-def send_password_reset(
-    email: str,
-):
-
-    reset_link = (
-        auth.generate_password_reset_link(
-            email
-        )
-    )
-
-    return {
-
-        "success": True,
-
-        "message":
-            "Password reset link generated",
-
-        "reset_link":
-            reset_link,
-    }
+    return {"status": "deleted"}
