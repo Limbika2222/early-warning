@@ -66,3 +66,17 @@ export function downloadReport(
     "_blank"
   );
 }
+
+// =====================================================
+// PREVIEW REPORT
+// =====================================================
+
+export function previewReport(
+  reportId: number
+) {
+
+  return (
+
+    `${API_BASE}/api/reports/preview/${reportId}`
+  );
+}

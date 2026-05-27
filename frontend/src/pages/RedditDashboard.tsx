@@ -1,6 +1,18 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
+
+import { motion } from "framer-motion";
+
+import {
+  Activity,
+  AlertTriangle,
+  Brain,
+  TrendingUp,
+  ShieldAlert,
+  RefreshCcw,
+} from "lucide-react";
+
 import {
   BarChart,
   Bar,
@@ -11,394 +23,1006 @@ import {
   CartesianGrid,
   LineChart,
   Line,
-} from "recharts"
+} from "recharts";
 
-// ---------------- TYPES ----------------
+// =====================================================
+// TYPES
+// =====================================================
 
 interface TimeSeriesItem {
-  date: string
-  symptom: string
-  count: number
+  date: string;
+  symptom: string;
+  count: number;
 }
 
 interface Alert {
-  date: string
-  symptom: string
-  actual: number
-  expected: number
-  z_score: number
-  type: string
-  generated_at?: string
+  date: string;
+  symptom: string;
+  actual: number;
+  expected: number;
+  z_score: number;
+  type: string;
+  generated_at?: string;
 }
 
 interface Post {
-  id: string
-  title: string
-  text: string
-  created_date: string
-  subreddit: string
+  id: string;
+  title: string;
+  text: string;
+  created_date: string;
+  subreddit: string;
 }
 
 interface Metrics {
-  signal_index: number
-  active_symptoms: number
-  alerts: number
-  top_symptom: string
+  signal_index: number;
+  active_symptoms: number;
+  alerts: number;
+  top_symptom: string;
 }
 
 interface RedditResponse {
-  time_series: TimeSeriesItem[]
-  alerts: Alert[]
-  alert_history?: Alert[]
-  metrics: Metrics
-  posts: Post[]
-  probable_diseases?: Disease[]
+  time_series: TimeSeriesItem[];
+  alerts: Alert[];
+  alert_history?: Alert[];
+  metrics: Metrics;
+  posts: Post[];
+  probable_diseases?: Disease[];
 }
 
 interface ChartData {
-  name: string
-  value: number
+  name: string;
+  value: number;
 }
 
 interface Disease {
-  disease: string
-  probability: number
+  disease: string;
+  probability: number;
 }
 
 interface MultiLineDataItem {
-  date: string
-  fever?: number
-  cough?: number
-  fatigue?: number
-  headache?: number
-  chills?: number
+  date: string;
+  fever?: number;
+  cough?: number;
+  fatigue?: number;
+  headache?: number;
+  chills?: number;
 }
 
-// ---------------- COMPONENT ----------------
+// =====================================================
+// COMPONENT
+// =====================================================
 
 export default function RedditDashboard() {
-  const [barData, setBarData] = useState<ChartData[]>([])
-  const [lineData, setLineData] = useState<MultiLineDataItem[]>([])
-  const [metrics, setMetrics] = useState<Metrics | null>(null)
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [alertHistory, setAlertHistory] = useState<Alert[]>([])
-  const [posts, setPosts] = useState<Post[]>([])
-  const [diseases, setDiseases] = useState<Disease[]>([])
 
-  const [loading, setLoading] = useState(true)
-  const [lastUpdated, setLastUpdated] = useState<string>("")
+  const [barData, setBarData] =
+    useState<ChartData[]>([]);
 
-  const [startDate, setStartDate] = useState<string>("")
-  const [endDate, setEndDate] = useState<string>("")
+  const [lineData, setLineData] =
+    useState<MultiLineDataItem[]>([]);
 
-  // ---------------- FETCH ----------------
+  const [metrics, setMetrics] =
+    useState<Metrics | null>(null);
+
+  const [alerts, setAlerts] =
+    useState<Alert[]>([]);
+
+  const [, setAlertHistory] =
+    useState<Alert[]>([]);
+
+  const [posts, setPosts] =
+    useState<Post[]>([]);
+
+  const [diseases, setDiseases] =
+    useState<Disease[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [lastUpdated, setLastUpdated] =
+    useState<string>("");
+
+  const [startDate, setStartDate] =
+    useState<string>("");
+
+  const [endDate, setEndDate] =
+    useState<string>("");
+
+  // =====================================================
+  // FETCH DATA
+  // =====================================================
 
   const fetchData = async () => {
+
     try {
-      setLoading(true)
 
-      const query = new URLSearchParams()
+      setLoading(true);
 
-      if (startDate) query.append("start_date", startDate)
-      if (endDate) query.append("end_date", endDate)
+      const query =
+        new URLSearchParams();
+
+      if (startDate) {
+
+        query.append(
+          "start_date",
+          startDate
+        );
+      }
+
+      if (endDate) {
+
+        query.append(
+          "end_date",
+          endDate
+        );
+      }
 
       const res = await fetch(
         `${import.meta.env.VITE_API_BASE}/api/reddit/signal?${query.toString()}`
-      )
+      );
 
-      const json: RedditResponse = await res.json()
+      const json: RedditResponse =
+        await res.json();
 
-      setDiseases(json.probable_diseases || [])
+      setDiseases(
+        json.probable_diseases || []
+      );
 
-      const baseSeries = json.time_series
+      const baseSeries =
+        json.time_series;
 
-      const filteredSeries = baseSeries.filter((d) => {
-        const current = new Date(d.date)
+      const symptomCounts:
+        Record<string, number> = {};
 
-        if (startDate && current < new Date(startDate)) return false
-        if (endDate && current > new Date(endDate)) return false
+      baseSeries.forEach((item) => {
 
-        return true
-      })
+        symptomCounts[item.symptom] =
+          (symptomCounts[item.symptom] || 0)
+          + item.count;
+      });
 
-      const symptomCounts: Record<string, number> = {}
+      const formattedBar =
+        Object.entries(symptomCounts)
+          .map(([symptom, count]) => ({
+            name: symptom,
+            value: count,
+          }))
+          .sort((a, b) =>
+            b.value - a.value
+          )
+          .slice(0, 6);
 
-      filteredSeries.forEach((item) => {
-        if (item.count > 0) {
-          symptomCounts[item.symptom] =
-            (symptomCounts[item.symptom] || 0) + item.count
-        }
-      })
+      setBarData(formattedBar);
 
-      const formattedBar: ChartData[] = Object.entries(symptomCounts)
-        .map(([symptom, count]) => ({
-          name: symptom,
-          value: count,
-        }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 6)
+      const trendMap:
+        Record<string, MultiLineDataItem> = {};
 
-      setBarData(formattedBar)
+      baseSeries.forEach((item) => {
 
-      const symptoms = ["fever", "cough", "fatigue", "headache", "chills"] as const
-      type SymptomKey = typeof symptoms[number]
-
-      const trendMap: Record<string, MultiLineDataItem> = {}
-
-      filteredSeries.forEach((item) => {
         if (!trendMap[item.date]) {
-          trendMap[item.date] = { date: item.date }
+
+          trendMap[item.date] = {
+            date: item.date,
+          };
         }
 
-        if (symptoms.includes(item.symptom as SymptomKey)) {
-          const key = item.symptom as SymptomKey
-          trendMap[item.date][key] = item.count
-        }
-      })
+        const key = item.symptom;
 
-      const rawData = Object.values(trendMap)
+        (
+          trendMap[item.date] as unknown as Record<
+            string,
+            number | string
+          >
+        )[key] = item.count;
+      });
 
-      const smoothData = rawData.map((point, index, arr) => {
-        const getAvg = (key: keyof MultiLineDataItem) => {
-          let sum = 0
-          let count = 0
+      setLineData(
+        Object.values(trendMap)
+      );
 
-          for (let i = index - 1; i <= index + 1; i++) {
-            if (arr[i] && typeof arr[i][key] === "number") {
-              sum += arr[i][key] as number
-              count++
-            }
-          }
+      setMetrics(json.metrics);
 
-          return count > 0 ? Math.round(sum / count) : 0
-        }
+      setAlerts(json.alerts);
 
-        return {
-          date: point.date,
-          fever: getAvg("fever"),
-          cough: getAvg("cough"),
-          fatigue: getAvg("fatigue"),
-          headache: getAvg("headache"),
-          chills: getAvg("chills"),
-        }
-      })
+      setAlertHistory(
+        json.alert_history || []
+      );
 
-      setLineData(smoothData)
+      setPosts(json.posts);
 
-      setMetrics(json.metrics)
-      setAlerts(json.alerts)
-      setAlertHistory(json.alert_history || [])
-      setPosts(json.posts)
+      setLastUpdated(
+        new Date().toLocaleString()
+      );
 
-      setLastUpdated(new Date().toLocaleString())
+    } catch (error) {
 
-    } catch (err) {
-      console.error("❌ Reddit error:", err)
+      console.error(error);
+
     } finally {
-      setLoading(false)
+
+      setLoading(false);
     }
-  }
+  };
+
+  // =====================================================
+  // EFFECT
+  // =====================================================
 
   useEffect(() => {
-    fetchData()
-    // eslint-disable-next-line
-  }, [startDate, endDate])
 
-  const symptomColors = {
-    fever: "#EF4444",
-    cough: "#F59E0B",
-    fatigue: "#6366F1",
-    headache: "#8B5CF6",
-    chills: "#06B6D4",
+    fetchData();
+
+    // eslint-disable-next-line
+  }, [startDate, endDate]);
+
+  // =====================================================
+  // LOADING
+  // =====================================================
+
+  if (loading) {
+
+    return (
+
+      <div
+        className="
+          min-h-screen
+          bg-gray-50
+          flex
+          items-center
+          justify-center
+          text-gray-500
+        "
+      >
+        Loading Reddit Intelligence...
+      </div>
+    );
   }
 
-  return (
-    <div className="bg-slate-50 min-h-screen p-6 space-y-6">
+  // =====================================================
+  // UI
+  // =====================================================
 
+  return (
+
+    <div
+      className="
+        min-h-screen
+        bg-gray-50
+        p-8
+      "
+    >
+
+      {/* ================================================= */}
       {/* HEADER */}
-      <div className="flex justify-between items-center flex-wrap gap-3">
+      {/* ================================================= */}
+
+      <div
+        className="
+          flex
+          flex-col
+          xl:flex-row
+          xl:items-center
+          xl:justify-between
+          gap-6
+          mb-10
+        "
+      >
+
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800">
-            🧠 Reddit Health Intelligence
+
+          <h1
+            className="
+              text-4xl
+              font-bold
+              text-gray-900
+              tracking-tight
+            "
+          >
+            Reddit Intelligence Dashboard
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Last updated: {lastUpdated || "—"}
+
+          <p
+            className="
+              text-gray-500
+              mt-2
+              text-lg
+            "
+          >
+            AI-powered Reddit symptom
+            surveillance and anomaly tracking
           </p>
+
+<p
+  className="
+    text-sm
+    text-gray-400
+    mt-2
+  "
+>
+  Last Updated: {lastUpdated || "—"}
+</p>
+
         </div>
 
-        <div className="flex gap-2 items-center">
+        <div
+          className="
+            flex
+            items-center
+            gap-4
+            flex-wrap
+          "
+        >
 
           <input
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            onChange={(e) =>
+              setStartDate(
+                e.target.value
+              )
+            }
+            className="
+              bg-white
+              border
+              border-gray-200
+              rounded-2xl
+              px-4
+              py-3
+              shadow-sm
+            "
           />
-
-          <span className="text-xs text-slate-400">to</span>
 
           <input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            onChange={(e) =>
+              setEndDate(
+                e.target.value
+              )
+            }
+            className="
+              bg-white
+              border
+              border-gray-200
+              rounded-2xl
+              px-4
+              py-3
+              shadow-sm
+            "
           />
 
           <button
-            onClick={() => {
-              setStartDate("")
-              setEndDate("")
-              fetchData()
-            }}
-            className="bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1 rounded-md text-sm"
-          >
-            Reset
-          </button>
-
-          <button
             onClick={fetchData}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm"
+            className="
+              flex
+              items-center
+              gap-2
+              bg-indigo-600
+              hover:bg-indigo-700
+              text-white
+              px-5
+              py-3
+              rounded-2xl
+              transition-all
+            "
           >
+
+            <RefreshCcw size={16} />
+
             Refresh
+
           </button>
 
         </div>
+
       </div>
 
-      {/* METRICS */}
+      {/* ================================================= */}
+      {/* METRIC CARDS */}
+      {/* ================================================= */}
+
       {metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card title="Signal Index" value={metrics.signal_index} />
-          <Card title="Active Symptoms" value={metrics.active_symptoms} />
-          <Card title="Alerts" value={metrics.alerts} highlight />
-          <Card title="Top Symptom" value={metrics.top_symptom || "-"} />
+
+        <div
+          className="
+            grid
+            grid-cols-1
+            md:grid-cols-2
+            xl:grid-cols-4
+            gap-6
+            mb-10
+          "
+        >
+
+          <MetricCard
+            title="Signal Index"
+            value={metrics.signal_index}
+            icon={<TrendingUp size={22} />}
+            bgColor="
+              bg-gradient-to-br
+              from-indigo-500
+              to-indigo-700
+            "
+          />
+
+          <MetricCard
+            title="Active Symptoms"
+            value={metrics.active_symptoms}
+            icon={<Activity size={22} />}
+            bgColor="
+              bg-gradient-to-br
+              from-cyan-500
+              to-blue-600
+            "
+          />
+
+          <MetricCard
+            title="Current Alerts"
+            value={metrics.alerts}
+            icon={<AlertTriangle size={22} />}
+            bgColor="
+              bg-gradient-to-br
+              from-red-500
+              to-rose-600
+            "
+          />
+
+          <MetricCard
+            title="Top Symptom"
+            value={metrics.top_symptom}
+            icon={<Brain size={22} />}
+            bgColor="
+              bg-gradient-to-br
+              from-emerald-500
+              to-green-600
+            "
+          />
+
         </div>
       )}
 
+      {/* ================================================= */}
       {/* CHARTS */}
-      <div className="grid md:grid-cols-2 gap-6">
+      {/* ================================================= */}
 
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <h2 className="text-sm mb-3 text-slate-500">📈 Symptom Trends</h2>
+      <div
+        className="
+          grid
+          grid-cols-1
+          xl:grid-cols-2
+          gap-8
+          mb-10
+        "
+      >
 
-          {!loading && (
-            <ResponsiveContainer width="100%" height={250}>
+        {/* LINE CHART */}
+
+        <GlassCard
+          title="Symptom Trends"
+        >
+
+          <div className="h-[320px]">
+
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+            >
+
               <LineChart data={lineData}>
-                <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="date" angle={-35} textAnchor="end" height={70} tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                />
+
+                <XAxis dataKey="date" />
+
+                <YAxis />
+
                 <Tooltip />
-                <Line dataKey="fever" stroke={symptomColors.fever} strokeWidth={2} dot={false} />
-                <Line dataKey="cough" stroke={symptomColors.cough} dot={false} />
-                <Line dataKey="fatigue" stroke={symptomColors.fatigue} dot={false} />
-                <Line dataKey="headache" stroke={symptomColors.headache} dot={false} />
-                <Line dataKey="chills" stroke={symptomColors.chills} dot={false} />
+
+                <Line
+                  type="monotone"
+                  dataKey="fever"
+                  stroke="#EF4444"
+                  strokeWidth={3}
+                  dot={false}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="cough"
+                  stroke="#F59E0B"
+                  strokeWidth={3}
+                  dot={false}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="fatigue"
+                  stroke="#6366F1"
+                  strokeWidth={3}
+                  dot={false}
+                />
+
               </LineChart>
+
             </ResponsiveContainer>
-          )}
-        </div>
 
-        <div className="bg-white border border-gray-200 rounded-2xl p-4">
-          <h2 className="text-sm mb-3 text-slate-500">📊 Symptom Ranking</h2>
+          </div>
 
-          {!loading && (
-            <ResponsiveContainer width="100%" height={250}>
+        </GlassCard>
+
+        {/* BAR CHART */}
+
+        <GlassCard
+          title="Symptom Ranking"
+        >
+
+          <div className="h-[320px]">
+
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+            >
+
               <BarChart data={barData}>
-                <CartesianGrid stroke="#E5E7EB" />
-                <XAxis dataKey="name" angle={-25} textAnchor="end" height={70} tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                />
+
+                <XAxis dataKey="name" />
+
+                <YAxis />
+
                 <Tooltip />
-                <Bar dataKey="value" fill="#6366F1" />
+
+                <Bar
+                  dataKey="value"
+                  fill="#6366F1"
+                  radius={[8, 8, 0, 0]}
+                />
+
               </BarChart>
+
             </ResponsiveContainer>
-          )}
-        </div>
-      </div>
 
-      {/* DISEASES */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <h2 className="text-sm mb-4 text-slate-500">🧠 Probable Diseases</h2>
-        {diseases.map((d, i) => (
-          <div key={i} className="mb-2">
-            <div className="flex justify-between text-sm text-slate-800 mb-1">
-              <span>{d.disease}</span>
-              <span>{(d.probability * 100).toFixed(0)}%</span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-2">
-              <div
-                className="h-2 bg-indigo-600 rounded-full"
-                style={{ width: `${d.probability * 100}%` }}
-              />
-            </div>
           </div>
-        ))}
+
+        </GlassCard>
+
       </div>
 
-      {/* ALERTS */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <h2 className="text-sm mb-3 text-slate-500">🚨 Current Alerts</h2>
-        {alerts.length === 0 ? (
-          <p className="text-slate-400 text-sm">No alerts</p>
-        ) : (
-          alerts.map((a, i) => (
-            <div key={i} className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm mb-2">
-              {a.symptom.toUpperCase()} spike on {a.date}
-            </div>
-          ))
-        )}
+      {/* ================================================= */}
+      {/* DISEASES + ALERTS */}
+      {/* ================================================= */}
+
+      <div
+        className="
+          grid
+          grid-cols-1
+          xl:grid-cols-3
+          gap-8
+          mb-10
+        "
+      >
+
+        {/* DISEASES */}
+
+        <GlassCard
+          title="Probable Diseases"
+        >
+
+          <div className="space-y-3">
+
+            {diseases.map((disease, index) => (
+
+              <div key={index}>
+
+                <div
+                  className="
+                    flex
+                    justify-between
+                    mb-1
+                  "
+                >
+
+                  <span
+                    className="
+                      font-medium
+                      text-gray-600
+                      text-sm
+                    "
+                  >
+                    {disease.disease}
+                  </span>
+
+                  <span
+                    className="
+                      text-sm
+                      text-gray-500
+                    "
+                  >
+                    {(
+                      disease.probability * 100
+                    ).toFixed(0)}
+                    %
+                  </span>
+
+                </div>
+
+                <div
+                  className="
+                    w-full
+                    bg-gray-200
+                    rounded-full
+                    h-2
+                  "
+                >
+
+                  <div
+                    className="
+                      h-2
+                      bg-indigo-600
+                      rounded-full
+                    "
+                    style={{
+                      width:
+                        `${disease.probability * 100}%`,
+                    }}
+                  />
+
+                </div>
+
+              </div>
+            ))}
+
+          </div>
+
+        </GlassCard>
+
+        {/* ALERTS */}
+
+        <GlassCard
+          title="Current Alerts"
+        >
+
+          <div className="space-y-3">
+
+            {alerts.length === 0 ? (
+
+              <p
+                className="
+                  text-gray-400
+                "
+              >
+                No alerts detected
+              </p>
+
+            ) : (
+
+              alerts.map((alert, index) => (
+
+                <motion.div
+
+                  key={index}
+
+                  initial={{
+                    opacity: 0,
+                    y: 10,
+                  }}
+
+                  animate={{
+                    opacity: 1,
+                    y: 0,
+                  }}
+
+                  className="
+                    bg-red-50
+                    border
+                    border-red-200
+                    rounded-xl
+                    p-3
+                  "
+                >
+
+                  <div
+                    className="
+                      flex
+                      items-center
+                      justify-between
+                    "
+                  >
+
+                    <div>
+
+                      <h3
+                        className="
+                          font-semibold
+                          text-red-600
+                          text-sm
+                        "
+                      >
+                        {alert.symptom.toUpperCase()}
+                      </h3>
+
+                      <p
+                        className="
+                          text-xs
+                          text-red-500
+                          mt-1
+                        "
+                      >
+                        Spike detected on
+                        {` ${alert.date}`}
+                      </p>
+
+                    </div>
+
+                    <ShieldAlert
+                      size={18}
+                      className="
+                        text-red-500
+                      "
+                    />
+
+                  </div>
+
+                </motion.div>
+              ))
+            )}
+
+          </div>
+
+        </GlassCard>
+
       </div>
 
-      {/* ALERT HISTORY (RESTORED) */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <h2 className="text-sm mb-3 text-slate-500">📜 Alert History</h2>
-        {alertHistory.length === 0 ? (
-          <p className="text-slate-400 text-sm">No history</p>
-        ) : (
-          alertHistory.map((a, i) => (
-            <div key={i} className="text-xs text-slate-500 border-b border-slate-200 py-1">
-              [{a.generated_at}] {a.symptom} spike on {a.date}
-            </div>
-          ))
-        )}
-      </div>
-
+      {/* ================================================= */}
       {/* POSTS */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <h2 className="text-sm mb-3 text-slate-500">🧾 Reddit Posts</h2>
-        {posts.map((p) => (
-          <div key={p.id} className="border border-gray-200 rounded-xl p-3 mb-2">
-            <p className="font-semibold text-sm text-slate-800">{p.title}</p>
-            <p className="text-xs text-slate-500">
-              r/{p.subreddit} • {p.created_date}
-            </p>
-            <p className="text-sm text-slate-600">
-              {p.text?.slice(0, 120)}...
-            </p>
-          </div>
-        ))}
-      </div>
+      {/* ================================================= */}
+
+      <GlassCard
+        title="Recent Reddit Posts"
+      >
+
+        <div className="space-y-2">
+
+          {posts.map((post) => (
+
+            <div
+
+              key={post.id}
+
+              className="
+                border
+                border-gray-200
+                rounded-xl
+                p-3
+                hover:bg-gray-50
+                transition-all
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  items-start
+                  justify-between
+                  gap-3
+                "
+              >
+
+                <div>
+
+                  <h3
+                    className="
+                      font-semibold
+                      text-gray-800
+                      text-sm
+                    "
+                  >
+                    {post.title}
+                  </h3>
+
+                  <p
+                    className="
+                      text-xs
+                      text-gray-500
+                      mt-1
+                    "
+                  >
+                    r/{post.subreddit}
+                    {" • "}
+                    {post.created_date}
+                  </p>
+
+                </div>
+
+                <span
+                  className="
+                    bg-indigo-100
+                    text-indigo-700
+                    px-2.5
+                    py-0.5
+                    rounded-full
+                    text-xs
+                    font-medium
+                  "
+                >
+                  Reddit
+                </span>
+
+              </div>
+
+              <p
+                className="
+                  text-gray-600
+                  mt-2
+                  text-sm
+                  leading-normal
+                "
+              >
+                {post.text?.slice(0, 180)}...
+              </p>
+
+            </div>
+          ))}
+
+        </div>
+
+      </GlassCard>
 
     </div>
-  )
+  );
 }
 
-// ---------------- CARD ----------------
+// =====================================================
+// METRIC CARD
+// =====================================================
 
-function Card({
+function MetricCard({
+
   title,
   value,
-  highlight = false,
+  icon,
+  bgColor,
+
 }: {
-  title: string
-  value: number | string
-  highlight?: boolean
+  title: string;
+
+  value: string | number;
+
+  icon: React.ReactNode;
+
+  bgColor: string;
 }) {
+
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-4">
-      <p className="text-sm text-slate-500">{title}</p>
-      <p className={`text-2xl font-semibold ${highlight ? "text-red-500" : "text-slate-800"}`}>
-        {value}
-      </p>
+
+    <motion.div
+
+      whileHover={{
+        y: -5,
+        scale: 1.02,
+      }}
+
+      className={`
+        relative
+        overflow-hidden
+        rounded-3xl
+        p-6
+        shadow-lg
+        text-white
+        ${bgColor}
+      `}
+    >
+
+      <div
+        className="
+          absolute
+          -top-10
+          -right-10
+          w-40
+          h-40
+          bg-white/10
+          rounded-full
+        "
+      />
+
+      <div
+        className="
+          relative
+          z-10
+          flex
+          items-center
+          justify-between
+        "
+      >
+
+        <div>
+
+          <p
+            className="
+              text-sm
+              text-white/80
+              mb-2
+            "
+          >
+            {title}
+          </p>
+
+          <h3
+            className="
+              text-4xl
+              font-bold
+            "
+          >
+            {value}
+          </h3>
+
+        </div>
+
+        <div
+          className="
+            w-14
+            h-14
+            rounded-2xl
+            bg-white/20
+            flex
+            items-center
+            justify-center
+          "
+        >
+          {icon}
+        </div>
+
+      </div>
+
+    </motion.div>
+  );
+}
+
+// =====================================================
+// GLASS CARD
+// =====================================================
+
+function GlassCard({
+
+  title,
+  children,
+
+}: {
+  title: string;
+
+  children: React.ReactNode;
+}) {
+
+  return (
+
+    <div
+      className="
+        bg-white
+        rounded-3xl
+        border
+        border-gray-200
+        shadow-sm
+        p-6
+      "
+    >
+
+      <h2
+        className="
+          text-xl
+          font-semibold
+          text-gray-900
+          mb-6
+        "
+      >
+        {title}
+      </h2>
+
+      {children}
+
     </div>
-  )
+  );
 }

@@ -58,6 +58,10 @@ from app.api.report_download_api import (
     router as report_download_router
 )
 
+from app.api.report_preview_api import (
+    router as report_preview_router
+)
+
 # -------------------------------------------------
 # Reddit Signal API
 # -------------------------------------------------
@@ -267,6 +271,10 @@ app.include_router(
 
 app.include_router(
     report_download_router
+)
+
+app.include_router(
+    report_preview_router
 )
 
 
