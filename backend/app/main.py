@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from app.services.scheduler import (
+    start_scheduler
+)
 
 from fastapi.middleware.cors import (
     CORSMiddleware,
@@ -23,15 +26,37 @@ from app.api.alert_api import (
     router as alert_router,
 )
 
+from app.api.alerts import (
+    router as alerts_router,
+)
+
 from app.api.ranking_api import (
     router as ranking_router,
 )
 
 from app.api.admin_api import (
-    router as admin_router
+    router as admin_router,
 )
 
-from app.api.auth_api import router as auth_router
+from app.api.auth_api import (
+    router as auth_router,
+)
+
+from app.api.anomaly_api import (
+    router as anomaly_router
+)
+
+from app.api.reports_api import (
+    router as reports_router
+)
+
+from app.api.report_history_api import (
+    router as report_history_router
+)
+
+from app.api.report_download_api import (
+    router as report_download_router
+)
 
 # -------------------------------------------------
 # Reddit Signal API
@@ -50,14 +75,26 @@ from app.api.who_api import (
 )
 
 # -------------------------------------------------
-# Prediction API (NEW)
+# Prediction API
 # -------------------------------------------------
 
 from app.api.prediction_api import (
     router as prediction_router,
 )
 
+# =====================================================
+# DATABASE INIT
+# =====================================================
 
+from app.utils.database import (
+    init_db,
+)
+
+# =====================================================
+# INITIALIZE DATABASE
+# =====================================================
+
+init_db()
 
 # =====================================================
 # CREATE FASTAPI APPLICATION
@@ -65,17 +102,21 @@ from app.api.prediction_api import (
 
 app = FastAPI(
 
-    title=("Infodemiology Early "
-        "Warning System API"),
+    title=(
+        "Infodemiology Early Warning System API"
+    ),
 
     version="2.7.0",
 )
+
+start_scheduler()
 
 # =====================================================
 # CORS
 # =====================================================
 
 app.add_middleware(
+
     CORSMiddleware,
 
     allow_origins=["*"],
@@ -96,6 +137,7 @@ app.add_middleware(
 # -------------------------------------------------
 
 app.include_router(
+
     upload_router,
 
     prefix="/api/trends",
@@ -116,6 +158,7 @@ app.include_router(
 # -------------------------------------------------
 
 app.include_router(
+
     signal_api.router,
 
     prefix="/api",
@@ -140,7 +183,7 @@ app.include_router(
 )
 
 # -------------------------------------------------
-# Prediction API (NEW)
+# Prediction API
 # -------------------------------------------------
 
 app.include_router(
@@ -152,6 +195,7 @@ app.include_router(
 # -------------------------------------------------
 
 app.include_router(
+
     analysis_router,
 
     prefix="/api/analysis",
@@ -160,10 +204,11 @@ app.include_router(
 )
 
 # -------------------------------------------------
-# Alerts API
+# Existing Alert API
 # -------------------------------------------------
 
 app.include_router(
+
     alert_router,
 
     prefix="/api/alerts",
@@ -172,10 +217,23 @@ app.include_router(
 )
 
 # -------------------------------------------------
+# NEW Alerts & Anomalies API
+# -------------------------------------------------
+
+app.include_router(
+    alerts_router
+)
+
+app.include_router(
+    anomaly_router
+)
+
+# -------------------------------------------------
 # Ranking API
 # -------------------------------------------------
 
 app.include_router(
+
     ranking_router,
 
     prefix="/api/ranking",
@@ -183,11 +241,34 @@ app.include_router(
     tags=["Ranking"],
 )
 
+# -------------------------------------------------
+# Admin API
+# -------------------------------------------------
+
 app.include_router(
     admin_router
 )
 
-app.include_router(auth_router)
+# -------------------------------------------------
+# Auth API
+# -------------------------------------------------
+
+app.include_router(
+    auth_router
+)
+
+app.include_router(
+    reports_router
+)
+
+app.include_router(
+    report_history_router
+)
+
+app.include_router(
+    report_download_router
+)
+
 
 # =====================================================
 # ROOT
@@ -213,11 +294,13 @@ def root():
             "who",
 
             "prediction_engine",
+
+            "alerts_anomalies",
         ],
     }
 
 # =====================================================
-# HEALTH
+# HEALTH CHECK
 # =====================================================
 
 @app.get("/health")
@@ -237,9 +320,7 @@ def health_check():
             "who": True,
 
             "prediction_engine": True,
+
+            "alerts_anomalies": True,
         },
     }
-
-from app.utils.database import Base, engine
-
-Base.metadata.create_all(bind=engine)

@@ -29,6 +29,10 @@ import PredictionsDashboard from "./pages/PredictionsDashboard"
 
 import Settings from "./pages/Settings"
 
+import Alerts from "./pages/Alerts"
+
+import Reports from "./pages/Reports"
+
 export default function App() {
 
   // ===================================================
@@ -146,6 +150,24 @@ export default function App() {
           <Route
             path="/settings"
             element={<Settings />}
+          />
+
+          {/* ⚠️ ALERTS */}
+
+          <Route
+            path="/alerts"
+            element={
+              <DashboardProvider>
+                <Alerts />
+              </DashboardProvider>
+            }
+          />
+
+          {/* 📄 REPORTS */}
+
+          <Route
+            path="/reports"
+            element={<Reports />}
           />
 
         </Route>

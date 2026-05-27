@@ -5,34 +5,21 @@ import {
   Upload,
   Activity,
   AlertTriangle,
-  FileText,
   Settings,
-  BookOpen,
-  Globe,        // 🔥 NEW (WHO)
-  MessageCircle // 🔥 NEW (Reddit)
+  Globe,
+  MessageCircle
 } from "lucide-react"
 
-// -------------------------------------------------
-// MENU CONFIG (UPDATED)
-// -------------------------------------------------
 const menu = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-
-  // 🔥 NEW DATA SOURCES SECTION
-  { label: "Reddit Signals", icon: MessageCircle, path: "/reddit-dashboard" },
-  { label: "WHO Data", icon: Globe, path: "/who-dashboard" },
-
+  { label: "Reddit Signals", icon: MessageCircle, path: "/reddit" },
+  { label: "WHO Data", icon: Globe, path: "/who" },
   { label: "Upload Data", icon: Upload, path: "/upload" },
   { label: "Predictions", icon: Activity, path: "/predictions" },
-  { label: "Alerts & Anomalies", icon: AlertTriangle, path: "/alerts" },
-  { label: "Reports", icon: FileText, path: "/reports" },
+  { label: "Alerts", icon: AlertTriangle, path: "/alerts" },
   { label: "Settings", icon: Settings, path: "/settings" },
-  { label: "Documentation", icon: BookOpen, path: "/docs" },
 ]
 
-// -------------------------------------------------
-// COMPONENT
-// -------------------------------------------------
 export default function Sidebar() {
   return (
     <aside

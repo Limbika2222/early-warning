@@ -122,6 +122,8 @@ def init_db():
 
     import app.models.alerts
 
+    import app.models.report
+
     # -------------------------------------------------
     # CREATE TABLES
     # -------------------------------------------------
@@ -139,3 +141,17 @@ def init_db():
 # =====================================================
 
 init_db()
+
+# =====================================================
+# DATABASE SESSION DEPENDENCY
+# =====================================================
+
+def get_db():
+
+    db = SessionLocal()
+
+    try:
+        yield db
+
+    finally:
+        db.close()
